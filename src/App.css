@@ -1,0 +1,14 @@
+/* App.css */
+
+:root {
+  --header-offset: 96px; /* fallback until ResizeObserver sets the real value */
+}
+
+.app-main {
+  padding-top: calc(var(--header-offset) + 12px);
+}
+
+
+[id] {
+  scroll-margin-top: calc(var(--header-offset) + 12px);
+}
