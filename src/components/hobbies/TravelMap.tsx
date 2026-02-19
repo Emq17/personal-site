@@ -544,12 +544,14 @@ function getRegion(stop: TravelStop): Exclude<RegionFilter, "All"> {
 
 export default function TravelMap() {
   const globeRef = useRef<any>(null);
+  const globeContainerRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
   const [activeStopId, setActiveStopId] = useState<string | null>(null);
   const [countryBorders, setCountryBorders] = useState<any[]>([]);
   const [zoomLevel, setZoomLevel] = useState<number>(2.2);
   const [regionFilter, setRegionFilter] = useState<RegionFilter>("All");
   const [globeReady, setGlobeReady] = useState(false);
+  const [globeSize, setGlobeSize] = useState({ width: 760, height: 390 });
   const [webglSupported] = useState(() => {
     if (typeof document === "undefined") return true;
     try {
@@ -596,6 +598,34 @@ export default function TravelMap() {
       return coreDot;
     });
   }, [filteredStops, activeStopId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const win = window;
+    const node = globeContainerRef.current;
+    if (!node) return;
+
+    const updateSize = () => {
+      const width = Math.max(280, Math.floor(node.clientWidth));
+      const height = win.innerWidth < 640 ? 300 : 390;
+      setGlobeSize({ width, height });
+    };
+
+    updateSize();
+
+    if (typeof ResizeObserver === "undefined") {
+      win.addEventListener("resize", updateSize);
+      return () => win.removeEventListener("resize", updateSize);
+    }
+
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(node);
+    win.addEventListener("resize", updateSize);
+    return () => {
+      observer.disconnect();
+      win.removeEventListener("resize", updateSize);
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -672,13 +702,13 @@ export default function TravelMap() {
   };
 
   return (
-    <div className="relative rounded-2xl border border-cyan-300/15 bg-gradient-to-br from-[#0f1722] via-[#111a2a] to-[#0f1d2c] p-6 shadow-[0_16px_40px_rgba(2,6,23,0.45)]">
+    <div className="relative rounded-2xl border border-cyan-300/15 bg-gradient-to-br from-[#0f1722] via-[#111a2a] to-[#0f1d2c] p-4 sm:p-6 shadow-[0_16px_40px_rgba(2,6,23,0.45)]">
       <div
         aria-hidden
         className="pointer-events-none absolute -top-14 right-8 h-44 w-44 rounded-full bg-cyan-400/10 blur-3xl"
       />
 
-      <div className="relative flex items-start justify-between gap-4">
+      <div className="relative flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 text-center sm:text-left">
         <p className="text-white/60 mt-1">Search, click, and spin through places I have visited.</p>
         <div className="hidden sm:flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-[11px] uppercase tracking-wider text-cyan-100">
           Live Map
@@ -729,15 +759,18 @@ export default function TravelMap() {
         })}
       </div>
 
-      <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1.35fr_1fr] gap-6">
-        <div className="rounded-2xl border border-cyan-300/20 bg-[#0a1220] p-3 min-h-[390px] shadow-[0_10px_30px_rgba(8,145,178,0.15)]">
-          <div className="relative h-[390px] w-full rounded-xl overflow-hidden ring-1 ring-cyan-300/10">
+      <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1.35fr_1fr] gap-4 sm:gap-6">
+        <div className="rounded-2xl border border-cyan-300/20 bg-[#0a1220] p-2 sm:p-3 min-h-[300px] sm:min-h-[390px] shadow-[0_10px_30px_rgba(8,145,178,0.15)]">
+          <div
+            ref={globeContainerRef}
+            className="relative h-[300px] sm:h-[390px] w-full rounded-xl overflow-hidden ring-1 ring-cyan-300/10"
+          >
             {webglSupported ? (
               <Globe
                 ref={globeRef}
                 onGlobeReady={() => setGlobeReady(true)}
-                width={760}
-                height={390}
+                width={globeSize.width}
+                height={globeSize.height}
                 backgroundColor="rgba(0,0,0,0)"
                 globeImageUrl="/globe/earth-blue-marble.jpg"
                 bumpImageUrl="/globe/earth-topology.png"
@@ -776,12 +809,12 @@ export default function TravelMap() {
               </div>
             )}
 
-            <div className="absolute right-3 top-3 z-20 flex flex-col gap-2">
+            <div className="absolute right-2 sm:right-3 top-2 sm:top-3 z-20 flex flex-col gap-2">
               <button
                 type="button"
                 onClick={() => adjustZoom(-0.15)}
                 disabled={!webglSupported}
-                className="h-9 w-9 rounded-lg border border-cyan-300/30 bg-[#0b1422]/90 text-cyan-100 text-lg leading-none hover:bg-cyan-300/15 transition"
+                className="h-8 w-8 sm:h-9 sm:w-9 rounded-lg border border-cyan-300/30 bg-[#0b1422]/90 text-cyan-100 text-lg leading-none hover:bg-cyan-300/15 transition"
                 aria-label="Zoom in"
               >
                 +
@@ -790,7 +823,7 @@ export default function TravelMap() {
                 type="button"
                 onClick={() => adjustZoom(0.15)}
                 disabled={!webglSupported}
-                className="h-9 w-9 rounded-lg border border-cyan-300/30 bg-[#0b1422]/90 text-cyan-100 text-lg leading-none hover:bg-cyan-300/15 transition"
+                className="h-8 w-8 sm:h-9 sm:w-9 rounded-lg border border-cyan-300/30 bg-[#0b1422]/90 text-cyan-100 text-lg leading-none hover:bg-cyan-300/15 transition"
                 aria-label="Zoom out"
               >
                 -

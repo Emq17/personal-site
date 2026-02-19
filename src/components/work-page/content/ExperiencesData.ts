@@ -85,7 +85,7 @@ export const experiences = [
     ],
   },
   {
-    jobTitle: "Host",
+    jobTitle: "",
     companyName: "Turo",
     companyUrl: "",
     jobLocation: "Orlando, FL",

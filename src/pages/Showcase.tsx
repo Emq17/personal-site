@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { FaEnvelope, FaGithub, FaLinkedin } from "react-icons/fa";
 import { Link } from "react-router-dom";
 import profilePic from "../assets/profile.jpg";
@@ -10,6 +10,25 @@ import TravelMap from "../components/hobbies/TravelMap";
 import { hobbies } from "../components/hobbies/content/HobbiesData";
 
 export default function Showcase() {
+  const resolvePublicAsset = (path: string) => {
+    if (!path) return "";
+    if (/^https?:\/\//i.test(path)) return path;
+    const cleanPath = path.replace(/^\/+/, "");
+    return `${import.meta.env.BASE_URL}${cleanPath}`;
+  };
+
+  const [expandedProof, setExpandedProof] = useState<{ src: string; label: string } | null>(null);
+  const hiddenExperienceCompanies = new Set([
+    "Reunion & Westgate Resorts",
+    "Market Street Cafe",
+    "General Nutrition Centers (GNC)",
+    "Ascendant Holidays (Carnival)",
+  ]);
+
+  const visibleExperiences = experiences.filter(
+    (exp) => !hiddenExperienceCompanies.has(exp.companyName)
+  );
+
   const projectVisuals = [
     {
       title: "Performance Analysis Deck (Stakeholder Reporting)",
@@ -67,7 +86,7 @@ export default function Showcase() {
       <div className="mx-auto max-w-6xl">
         <section
           id="hero"
-          className="reveal showcase-card min-h-[52vh] md:min-h-[64vh] p-6 md:p-10 grid grid-cols-1 lg:grid-cols-[1.15fr_1fr] gap-8 items-center"
+          className="reveal showcase-card min-h-[52vh] md:min-h-[64vh] p-6 md:p-10 grid grid-cols-1 lg:grid-cols-[1.15fr_1fr] gap-8 items-center text-center lg:text-left"
         >
           <div className="space-y-5">
             <p className="section-kicker">Portfolio</p>
@@ -82,7 +101,7 @@ export default function Showcase() {
                 things that move the needle.
               </p>
             </div>
-            <div className="flex flex-wrap gap-3 pt-2">
+            <div className="flex flex-wrap gap-3 pt-2 justify-center lg:justify-start">
               <a href="#experience" className="showcase-cta-primary">
                 Explore Work
               </a>
@@ -101,7 +120,7 @@ export default function Showcase() {
           </div>
         </section>
 
-        <section id="projects" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28">
+        <section id="projects" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28 text-center md:text-left">
           <p className="section-kicker">Builds</p>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <h2 className="section-title">Projects</h2>
@@ -109,7 +128,7 @@ export default function Showcase() {
               href="https://github.com/Emq17"
               target="_blank"
               rel="noopener noreferrer"
-              className="showcase-cta-primary self-start sm:self-auto"
+              className="showcase-cta-primary self-center sm:self-auto"
             >
               View My GitHub Projects
             </a>
@@ -174,7 +193,7 @@ export default function Showcase() {
           </div>
         </section>
 
-        <section id="skills" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28">
+        <section id="skills" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28 text-center md:text-left">
           <p className="section-kicker">Expertise</p>
           <h2 className="section-title">Skills</h2>
           <p className="text-white/65 max-w-3xl">
@@ -203,15 +222,15 @@ export default function Showcase() {
           </div>
         </section>
 
-        <section id="experience" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28">
+        <section id="experience" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28 text-center md:text-left">
           <p className="section-kicker">Career</p>
           <h2 className="section-title">Experience</h2>
           <div className="mt-5 space-y-4">
-            {experiences.map((exp) => (
+            {visibleExperiences.map((exp) => (
               <article key={`${exp.companyName}-${exp.jobTitle}`} className="showcase-inner-card">
                 <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-2">
                   <div>
-                    <p className="text-xl font-semibold">{exp.jobTitle}</p>
+                    {exp.jobTitle ? <p className="text-xl font-semibold">{exp.jobTitle}</p> : null}
                     <p className="text-white/65 text-sm mt-1">
                       {exp.companyName} · {exp.jobLocation}
                     </p>
@@ -222,9 +241,9 @@ export default function Showcase() {
                     </p>
                   ) : null}
                 </div>
-                <p className="text-white/70 mt-3">{exp.jobSummary}</p>
-                <ul className="mt-3 space-y-1 text-white/72 list-disc list-inside">
-                  {exp.keyAchievements.slice(0, 3).map((point) => (
+                <p className="text-white/70 mt-3 text-sm md:text-base">{exp.jobSummary}</p>
+                <ul className="mt-3 space-y-1 text-white/72 list-disc list-inside text-sm">
+                  {exp.keyAchievements.slice(0, 2).map((point) => (
                     <li key={`${exp.jobTitle}-${point}`}>{point}</li>
                   ))}
                 </ul>
@@ -233,12 +252,15 @@ export default function Showcase() {
           </div>
         </section>
 
-        <section id="education" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28">
+        <section id="education" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28 text-center md:text-left">
           <p className="section-kicker">Background</p>
           <h2 className="section-title">Education</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
             {education.map((item) => (
-              <article key={`${item.institution}-${item.program}`} className="showcase-inner-card">
+              <article
+                key={`${item.institution}-${item.program}`}
+                className="showcase-inner-card relative"
+              >
                 <p className="text-white/95 font-semibold">{item.program}</p>
                 <p className="text-white/65 mt-1">{item.institution}</p>
                 <div className="mt-3 flex gap-2 flex-wrap">
@@ -246,6 +268,29 @@ export default function Showcase() {
                   {item.timeframe ? <span className="showcase-chip">{item.timeframe}</span> : null}
                 </div>
                 <p className="text-sm text-white/50 mt-3">{item.location}</p>
+                {"proofImage" in item && item.proofImage ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedProof({
+                        src: resolvePublicAsset(item.proofImage),
+                        label:
+                          "proofLabel" in item && item.proofLabel ? item.proofLabel : "View proof",
+                      })
+                    }
+                    className="absolute bottom-3 right-3 overflow-hidden rounded-md border border-cyan-300/40 bg-[#0b1320] hover:border-cyan-300/65 transition shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
+                    aria-label={
+                      "proofLabel" in item && item.proofLabel ? item.proofLabel : "View proof"
+                    }
+                  >
+                    <img
+                      src={resolvePublicAsset(item.proofImage)}
+                      alt={`${item.program} progress preview`}
+                      loading="lazy"
+                      className="h-10 w-14 object-cover"
+                    />
+                  </button>
+                ) : null}
               </article>
             ))}
           </div>
@@ -261,7 +306,7 @@ export default function Showcase() {
           </div>
         </section>
 
-        <section id="hobbies" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28">
+        <section id="hobbies" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28 text-center md:text-left">
           <p className="section-kicker">Life Outside Work</p>
           <h2 className="section-title">Hobbies</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-5">
@@ -288,7 +333,7 @@ export default function Showcase() {
           </div>
         </section>
 
-        <section id="travel" className="reveal showcase-card p-4 md:p-6 mt-20 md:mt-28">
+        <section id="travel" className="reveal showcase-card p-4 md:p-6 mt-20 md:mt-28 text-center md:text-left">
           <p className="section-kicker px-2 pt-2">Travel</p>
           <h2 className="section-title px-2">Travel Explorer</h2>
           <div className="mt-4">
@@ -304,7 +349,7 @@ export default function Showcase() {
           </div>
         </section>
 
-        <section id="contact" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28">
+        <section id="contact" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28 text-center md:text-left">
           <p className="section-kicker">Connect</p>
           <h2 className="section-title">Contact</h2>
           <p className="text-white/70">Reach out for collaborations, opportunities, or a quick intro.</p>
@@ -332,6 +377,39 @@ export default function Showcase() {
           </div>
         </section>
       </div>
+
+      {expandedProof ? (
+        <div
+          className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setExpandedProof(null)}
+        >
+          <div
+            className="relative w-full max-w-3xl rounded-xl border border-white/20 bg-[#0b1320] p-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setExpandedProof(null)}
+              className="absolute right-2 top-2 h-8 w-8 rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20 transition"
+              aria-label="Close proof preview"
+            >
+              ×
+            </button>
+            <p className="text-sm text-cyan-100/85 mb-2 pr-10">{expandedProof.label}</p>
+            <img
+              src={expandedProof.src}
+              alt={expandedProof.label}
+              onError={(e) => {
+                const fallback = resolvePublicAsset("/projects/remaining-classes.png");
+                if (e.currentTarget.src !== fallback) {
+                  e.currentTarget.src = fallback;
+                }
+              }}
+              className="w-full max-h-[75vh] object-contain rounded-lg bg-[#050b16]"
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

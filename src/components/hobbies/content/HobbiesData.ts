@@ -25,14 +25,6 @@ export const hobbies: Hobby[] = [
     media: [],
   },
   {
-    slug: "billiards",
-    title: "Billiards",
-    summary: "Precision, angles, and always thinking about the next move.",
-    description:
-      "Billiards keeps me sharp on geometry, patience, and execution quality. I am always thinking about the next move, not just the current shot.",
-    tags: ["Angles", "Control", "Consistency"],
-  },
-  {
     slug: "golfing",
     title: "Golfing",
     summary: "Composure and technical precision.",
@@ -47,22 +39,6 @@ export const hobbies: Hobby[] = [
     description:
       "Martial arts helps build consistency, self-control, and confidence. It balances physical intensity with technical execution.",
     tags: ["Discipline", "Technique", "Conditioning"],
-  },
-  {
-    slug: "dancing",
-    title: "Dancing",
-    summary: "Rhythm, flow, and expression.",
-    description:
-      "Dancing is where creativity and movement connect. It keeps me present, expressive, and adaptive.",
-    tags: ["Rhythm", "Flow", "Expression"],
-  },
-  {
-    slug: "flipping",
-    title: "Flipping",
-    summary: "Body control and progression.",
-    description:
-      "Flipping requires confidence, balance, and technique progression. It is one of my favorite ways to push movement skills.",
-    tags: ["Balance", "Body Control", "Progressions"],
   },
   {
     slug: "working-out",

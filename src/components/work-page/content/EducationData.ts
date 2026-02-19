@@ -26,12 +26,14 @@ export const education = [
     status: "Final Semester",
     timeframe: "In Progress",
     location: "Salt Lake City, Utah, United States",
+    proofImage: "/projects/remaining-classes.png",
+    proofLabel: "View degree progress",
   },
   {
     institution: "Western Governors University",
     program: "Master of Science in Computer Science",
-    status: "Planned Start",
-    timeframe: "Fall Intake",
+    status: "First Semester Fall 2026",
+    timeframe: "",
     location: "Salt Lake City, Utah, United States",
   },
 ];
