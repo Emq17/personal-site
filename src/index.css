@@ -1,6 +1,44 @@
 @import "tailwindcss";
 @plugin "daisyui";
 
+:root {
+  --site-bg-base: #111722;
+  --site-bg-elev: #1d2633;
+  --site-accent: #2fc5ff;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 html {
   scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  color: #eef5ff;
+  background:
+    radial-gradient(1100px 700px at 5% -10%, rgba(56, 182, 255, 0.13), transparent 55%),
+    radial-gradient(900px 500px at 95% 0%, rgba(74, 107, 255, 0.12), transparent 58%),
+    linear-gradient(180deg, var(--site-bg-elev), var(--site-bg-base) 45%);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.12;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 22px 22px, 22px 22px;
 }

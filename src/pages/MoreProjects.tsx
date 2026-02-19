@@ -1,3 +1,5 @@
+import DashboardsSection from "../components/work-page/DashboardsSection";
+
 const MoreProjects = () => {
   return (
     <div className="w-full bg-[#1d232a] text-white px-4">
@@ -8,12 +10,14 @@ const MoreProjects = () => {
           id="mp-overview"
           className="mb-14 rounded-xl border border-white/10 bg-white/5 backdrop-blur-md p-6"
         >
-          <h1 className="text-4xl md:text-5xl font-bebas mb-2">More Projects</h1>
+          <h1 className="text-4xl md:text-5xl font-bebas mb-2">Projects</h1>
           <p className="text-white/70">
             A categorized space to show my broader build range — software systems, analytics,
             and financial markets work.
           </p>
         </div>
+
+        <DashboardsSection />
 
         {/* SOFTWARE */}
         <section id="mp-software" className="py-12">

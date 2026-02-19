@@ -3,9 +3,9 @@
 A modern personal website and portfolio built with **React**, **TypeScript**, and **Vite**, focused on presenting my work, projects, dashboards, and hobbies in one place.
 
 ## Pages
-- **Work** (`/`) — intro + skills + dashboards + experience + contact CTA
+- **Work** (`/`) — intro + skills + experience + education + contact CTA
 - **Home** (`/home`) — overview, about me, values
-- **More Projects** (`/more-projects`) — software, financial markets, analytics
+- **Projects** (`/more-projects`) — software, financial markets, analytics
 - **Hobbies** (`/hobbies`) — chess, billiards, ping pong, golf, martial arts, dancing, flipping, working out, videography, music, travel
 - **Contact** (`/contact`) — contact page
 

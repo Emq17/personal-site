@@ -1,3 +1,7 @@
+import { Suspense, lazy } from "react";
+
+const TravelMap = lazy(() => import("../components/hobbies/TravelMap"));
+
 const Hobbies = () => {
   const Card = ({
     title,
@@ -121,11 +125,16 @@ const Hobbies = () => {
         </section>
 
         <section id="hob-travel" className="py-12">
-          <Card
-            title="Travel"
-            desc="New environments reset my mind and keep life inspiring."
-            tags={["Exploration", "Photography", "Food", "Culture"]}
-          />
+          <Suspense
+            fallback={
+              <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-md p-6">
+                <p className="text-white/90 font-semibold text-xl">Travel Globe</p>
+                <p className="text-white/60 mt-2">Loading globe...</p>
+              </div>
+            }
+          >
+            <TravelMap />
+          </Suspense>
         </section>
       </div>
     </div>

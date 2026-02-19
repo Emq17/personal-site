@@ -7,9 +7,9 @@ import {
 
 const getIcon = (title: string) => {
   switch (title) {
-    case "Languages":
+    case "Technologies":
       return <FaCode className="text-purple-400" />;
-    case "Analytics":
+    case "Data & Analytics":
       return <FaLayerGroup className="text-purple-400" />;
     case "Practices":
       return <FaDatabase className="text-purple-400" />;
