@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/chess-sync?username=zaibao1&max=220",
+      "schedule": "0 */6 * * *"
+    }
+  ]
+}
