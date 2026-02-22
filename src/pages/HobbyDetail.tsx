@@ -370,6 +370,9 @@ export default function HobbyDetail() {
   const [lichessUsername, setLichessUsername] = useState("zaibao1");
   const [analysisWindow, setAnalysisWindow] = useState<1 | 5>(5);
   const [coachReport, setCoachReport] = useState<CoachReport | null>(null);
+  const isLocalDev =
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
   const syncStatus: "idle" | "syncing" | "ok" | "error" = pgnLoading
     ? "syncing"
     : pgnError
@@ -393,6 +396,30 @@ export default function HobbyDetail() {
     )}?max=220&opening=true&moves=true&pgnInJson=false&format=pgn`;
 
     try {
+      if (isLocalDev) {
+        const directRes = await fetch(directUrl, {
+          headers: { Accept: "application/x-chess-pgn,text/plain;q=0.9,*/*;q=0.8" },
+        });
+        if (!directRes.ok) {
+          setPgnError("Live sync failed in local dev. Lichess request returned an error.");
+          setPgnText("");
+          setPgnLoading(false);
+          return;
+        }
+        const directText = await directRes.text();
+        if (!directText.trim() || !isValidPgn(directText)) {
+          setPgnError("Live sync failed in local dev. No valid PGN returned.");
+          setPgnText("");
+          setPgnLoading(false);
+          return;
+        }
+        setPgnText(directText);
+        setLastSyncedAt(new Date().toLocaleTimeString());
+        setSyncSource(`Direct Lichess (${username})`);
+        setPgnLoading(false);
+        return;
+      }
+
       // Preferred path: sync to Supabase snapshot via API route.
       const snapshotRes = await fetch(snapshotUrl, { headers: { Accept: "application/json" } });
       if (snapshotRes.ok) {
@@ -443,6 +470,10 @@ export default function HobbyDetail() {
     if (!isChess) return;
     const username = lichessUsername.trim() || "zaibao1";
     const loadSnapshot = async () => {
+      if (isLocalDev) {
+        await syncChessData();
+        return;
+      }
       try {
         const res = await fetch(`/api/chess-data?username=${encodeURIComponent(username)}`, {
           headers: { Accept: "application/json" },
@@ -468,7 +499,7 @@ export default function HobbyDetail() {
     void loadSnapshot();
     // Initial chess data load should run on page entry; manual sync button handles updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isChess]);
+  }, [isChess, isLocalDev]);
 
   const parsedChessGames = useMemo(
     () => (isChess && pgnText ? parsePgnHeaders(pgnText) : []),
