@@ -138,7 +138,11 @@ function parseMoveQualityFromAnnotations(movesText: string) {
     .replace(/\{[^}]*\}/g, " ")
     .replace(/\([^)]*\)/g, " ")
     .replace(/\s+/g, " ");
-  const movePattern = /(\d+)\.\s*([^\s]+)(?:\s+([^\s]+))?/g;
+  const normalized = cleaned
+    .replace(/\d+\.(\.\.)?/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const tokens = normalized ? normalized.split(" ") : [];
 
   let whiteBlunders = 0;
   let whiteMistakes = 0;
@@ -149,37 +153,57 @@ function parseMoveQualityFromAnnotations(movesText: string) {
   let blackInaccuracies = 0;
   let blackBrilliants = 0;
 
-  const applyToken = (token: string | undefined, side: "white" | "black") => {
-    if (!token) return;
-    if (token === "1-0" || token === "0-1" || token === "1/2-1/2" || token === "*") return;
-    const suffix = (token.match(/([!?]{1,2})$/)?.[1] ?? "").trim();
-    if (!suffix) return;
-
-    const add = (kind: "blunder" | "mistake" | "inaccuracy" | "brilliant") => {
-      if (side === "white") {
-        if (kind === "blunder") whiteBlunders += 1;
-        if (kind === "mistake") whiteMistakes += 1;
-        if (kind === "inaccuracy") whiteInaccuracies += 1;
-        if (kind === "brilliant") whiteBrilliants += 1;
-      } else {
-        if (kind === "blunder") blackBlunders += 1;
-        if (kind === "mistake") blackMistakes += 1;
-        if (kind === "inaccuracy") blackInaccuracies += 1;
-        if (kind === "brilliant") blackBrilliants += 1;
-      }
-    };
-
-    if (suffix === "??") add("blunder");
-    else if (suffix === "?!") add("inaccuracy");
-    else if (suffix === "?") add("mistake");
-    else if (suffix === "!!") add("brilliant");
+  const add = (side: "white" | "black", kind: "blunder" | "mistake" | "inaccuracy" | "brilliant") => {
+    if (side === "white") {
+      if (kind === "blunder") whiteBlunders += 1;
+      if (kind === "mistake") whiteMistakes += 1;
+      if (kind === "inaccuracy") whiteInaccuracies += 1;
+      if (kind === "brilliant") whiteBrilliants += 1;
+    } else {
+      if (kind === "blunder") blackBlunders += 1;
+      if (kind === "mistake") blackMistakes += 1;
+      if (kind === "inaccuracy") blackInaccuracies += 1;
+      if (kind === "brilliant") blackBrilliants += 1;
+    }
   };
 
-  let match = movePattern.exec(cleaned);
-  while (match) {
-    applyToken(match[2], "white");
-    applyToken(match[3], "black");
-    match = movePattern.exec(cleaned);
+  const applyGlyph = (side: "white" | "black" | null, glyph: string) => {
+    if (!side) return;
+    if (glyph === "??") add(side, "blunder");
+    else if (glyph === "?") add(side, "mistake");
+    else if (glyph === "?!" || glyph === "!?") add(side, "inaccuracy");
+    else if (glyph === "!!") add(side, "brilliant");
+  };
+
+  const applyNag = (side: "white" | "black" | null, nag: string) => {
+    if (!side) return;
+    // Common NAG mapping used in annotated PGN.
+    if (nag === "$4") add(side, "blunder");
+    else if (nag === "$2") add(side, "mistake");
+    else if (nag === "$6") add(side, "inaccuracy");
+    else if (nag === "$3") add(side, "brilliant");
+  };
+
+  let side: "white" | "black" = "white";
+  let lastSide: "white" | "black" | null = null;
+
+  for (const token of tokens) {
+    if (!token || token === "*" || token === "1-0" || token === "0-1" || token === "1/2-1/2") continue;
+
+    if (/^\$\d+$/.test(token)) {
+      applyNag(lastSide, token);
+      continue;
+    }
+    if (/^(?:\?\?|\?|!!|!\?|\?!|!)$/.test(token)) {
+      applyGlyph(lastSide, token);
+      continue;
+    }
+
+    const suffix = token.match(/(\?\?|\?!|\?|!!|!\?)$/)?.[1] ?? "";
+    if (suffix) applyGlyph(side, suffix);
+
+    lastSide = side;
+    side = side === "white" ? "black" : "white";
   }
 
   return {
@@ -258,9 +282,21 @@ function parsePgnHeaders(pgnText: string): ParsedChessGame[] {
 
   return chunks.map((chunk) => {
     const dateRaw = headerValue(chunk, "Date");
-    const parsedDate = dateRaw
-      ? new Date(dateRaw.replace(/\./g, "-"))
-      : null;
+    const utcTimeRaw = headerValue(chunk, "UTCTime");
+    const normalizedDate = dateRaw ? dateRaw.replace(/\./g, "-") : "";
+    const hasFullDate = normalizedDate && !normalizedDate.includes("?");
+    const hasFullTime = utcTimeRaw && !utcTimeRaw.includes("?");
+    const parsedDateFromDateTime =
+      hasFullDate && hasFullTime
+        ? new Date(`${normalizedDate}T${utcTimeRaw}Z`)
+        : null;
+    const parsedDateFromDateOnly = hasFullDate ? new Date(normalizedDate) : null;
+    const parsedDate =
+      parsedDateFromDateTime && !Number.isNaN(parsedDateFromDateTime.getTime())
+        ? parsedDateFromDateTime
+        : parsedDateFromDateOnly && !Number.isNaN(parsedDateFromDateOnly.getTime())
+          ? parsedDateFromDateOnly
+          : null;
     const toNumber = (v: string) => {
       const n = Number.parseInt(v, 10);
       return Number.isFinite(n) ? n : null;
@@ -272,7 +308,18 @@ function parsePgnHeaders(pgnText: string): ParsedChessGame[] {
       .join(" ");
     const evalQuality = parseMoveQualityFromEvals(movesText);
     const annotationQuality = parseMoveQualityFromAnnotations(movesText);
-    const quality = evalQuality.hasEvalData ? evalQuality : annotationQuality;
+    const annotationHasData =
+      annotationQuality.whiteBlunders +
+        annotationQuality.whiteMistakes +
+        annotationQuality.whiteInaccuracies +
+        annotationQuality.whiteBrilliants +
+        annotationQuality.blackBlunders +
+        annotationQuality.blackMistakes +
+        annotationQuality.blackInaccuracies +
+        annotationQuality.blackBrilliants >
+      0;
+    // Prefer Lichess-provided move labels when available to match site analysis counts.
+    const quality = annotationHasData ? annotationQuality : evalQuality.hasEvalData ? evalQuality : annotationQuality;
 
     return {
       date: parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate : null,
@@ -889,9 +936,6 @@ function MiniSignalsChart({
           stroke="rgba(148,163,184,0.35)"
           strokeWidth="1"
         />
-        <text x={8} y={18} fill="rgba(203,213,225,0.75)" fontSize="10">
-          Total Count
-        </text>
         {Array.from({ length: 5 }).map((_, i) => {
           const value = Math.round(maxVal - (i * maxVal) / 4);
           const y = pad + (i * plotH) / 4 + 3;
@@ -1159,6 +1203,12 @@ export default function HobbyDetail() {
     if (!chessSummary) return [];
     return chessSummary.signalRows;
   }, [chessSummary]);
+  const hasSignalSourceData = useMemo(
+    () =>
+      /\[%eval\s+[^\]\s]+\]/.test(pgnText) ||
+      /(?:\?\?|\?!|!!|\$2|\$3|\$4|\$6)(?=\s|$)/.test(pgnText),
+    [pgnText]
+  );
   const effectiveAnalysisWindow = useMemo(() => {
     const total = parsedChessGames.length;
     if (total === 0) return 1;
@@ -1440,6 +1490,11 @@ export default function HobbyDetail() {
                       ))}
                     </select>
                   </div>
+                  {!hasSignalSourceData ? (
+                    <p className="mb-3 text-xs text-amber-200/85">
+                      No eval/annotation tags found in current PGN snapshot. Signal metrics may show 0 until analyzed games are synced.
+                    </p>
+                  ) : null}
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
                     <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm">
                       <p className="text-[11px] uppercase tracking-wider text-white/55">Blunders</p>
