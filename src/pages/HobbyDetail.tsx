@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
-import { hobbies, hobbyBySlug } from "../components/hobbies/content/HobbiesData";
+import { hobbyBySlug } from "../components/hobbies/content/HobbiesData";
 
 type ParsedChessGame = {
   date: Date | null;
@@ -13,6 +13,14 @@ type ParsedChessGame = {
   timeControl: string;
   termination: string;
   moveCount: number;
+  annotationBlunders: number;
+  annotationMistakes: number;
+  annotationInaccuracies: number;
+  annotationBrilliants: number;
+  blackBlunders: number;
+  blackMistakes: number;
+  blackInaccuracies: number;
+  blackBrilliants: number;
 };
 
 type PlayerChessGame = {
@@ -25,6 +33,10 @@ type PlayerChessGame = {
   timeControl: string;
   termination: string;
   moveCount: number;
+  annotationBlunders: number;
+  annotationMistakes: number;
+  annotationInaccuracies: number;
+  annotationBrilliants: number;
 };
 
 type ChessSummary = {
@@ -40,7 +52,20 @@ type ChessSummary = {
   avgOpponent: number | null;
   ratingSeries: Array<{ label: string; rating: number }>;
   openingRows: Array<{ eco: string; games: number; winRate: number }>;
+  openingTypeRows: Array<{ label: string; games: number; winRate: number }>;
   gameResults: Array<"W" | "D" | "L">;
+  signalRows: Array<{
+    game: string;
+    blunders: number;
+    mistakes: number;
+    inaccuracies: number;
+    brilliants: number;
+  }>;
+  totalBlunders: number;
+  totalMistakes: number;
+  totalInaccuracies: number;
+  totalBrilliants: number;
+  avgBlundersPerGame: number;
   insights: string[];
 };
 
@@ -48,10 +73,13 @@ type CoachReport = {
   title: string;
   summary: string;
   focus: string;
+  quickFixes: string[];
   checklist: string[];
   secretInsights: string[];
   visuals: Array<{ label: string; value: number; hint: string }>;
 };
+
+const WINDOW_OPTIONS = [1, 2, 3, 4, 5, 10, 20, 30, 50];
 
 function HoverHelp({ text }: { text: string }) {
   return (
@@ -76,6 +104,147 @@ function openingTypeFromEco(eco: string) {
   return "Mixed";
 }
 
+function openingMoveHint(label: string) {
+  if (label === "Flank / Irregular") {
+    return "Flexible flank starts (like 1.c4, 1.Nf3, or irregular setups) that often lead to less scripted middlegames.";
+  }
+  if (label === "Semi-Open / Indian") {
+    return "Typically 1.e4 responses other than ...e5, or Indian structures with asymmetry and tactical counterplay.";
+  }
+  if (label === "Open Games / French") {
+    return "Usually 1.e4 e5 families and French structures where central tension and early piece activity matter.";
+  }
+  if (label === "Closed / Queen's Pawn") {
+    return "Queen's pawn systems with slower structure fights, pawn breaks, and long-term planning.";
+  }
+  if (label === "Indian Defenses") {
+    return "King's Indian / Nimzo / related setups with dynamic imbalance and timing-based pawn breaks.";
+  }
+  return "Mixed opening family from your games.";
+}
+
+function parseEvalToken(token: string) {
+  if (!token) return null;
+  if (token.startsWith("#")) {
+    if (token.startsWith("#-")) return -10;
+    return 10;
+  }
+  const n = Number.parseFloat(token);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseMoveQualityFromAnnotations(movesText: string) {
+  const cleaned = movesText
+    .replace(/\{[^}]*\}/g, " ")
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\s+/g, " ");
+  const movePattern = /(\d+)\.\s*([^\s]+)(?:\s+([^\s]+))?/g;
+
+  let whiteBlunders = 0;
+  let whiteMistakes = 0;
+  let whiteInaccuracies = 0;
+  let whiteBrilliants = 0;
+  let blackBlunders = 0;
+  let blackMistakes = 0;
+  let blackInaccuracies = 0;
+  let blackBrilliants = 0;
+
+  const applyToken = (token: string | undefined, side: "white" | "black") => {
+    if (!token) return;
+    if (token === "1-0" || token === "0-1" || token === "1/2-1/2" || token === "*") return;
+    const suffix = (token.match(/([!?]{1,2})$/)?.[1] ?? "").trim();
+    if (!suffix) return;
+
+    const add = (kind: "blunder" | "mistake" | "inaccuracy" | "brilliant") => {
+      if (side === "white") {
+        if (kind === "blunder") whiteBlunders += 1;
+        if (kind === "mistake") whiteMistakes += 1;
+        if (kind === "inaccuracy") whiteInaccuracies += 1;
+        if (kind === "brilliant") whiteBrilliants += 1;
+      } else {
+        if (kind === "blunder") blackBlunders += 1;
+        if (kind === "mistake") blackMistakes += 1;
+        if (kind === "inaccuracy") blackInaccuracies += 1;
+        if (kind === "brilliant") blackBrilliants += 1;
+      }
+    };
+
+    if (suffix === "??") add("blunder");
+    else if (suffix === "?!") add("inaccuracy");
+    else if (suffix === "?") add("mistake");
+    else if (suffix === "!!") add("brilliant");
+  };
+
+  let match = movePattern.exec(cleaned);
+  while (match) {
+    applyToken(match[2], "white");
+    applyToken(match[3], "black");
+    match = movePattern.exec(cleaned);
+  }
+
+  return {
+    whiteBlunders,
+    whiteMistakes,
+    whiteInaccuracies,
+    blackBlunders,
+    blackMistakes,
+    blackInaccuracies,
+    whiteBrilliants,
+    blackBrilliants,
+  };
+}
+
+function parseMoveQualityFromEvals(movesText: string) {
+  const evalMatches = [...movesText.matchAll(/\[%eval\s+([^\]\s]+)\]/g)];
+  const evals = evalMatches
+    .map((m) => parseEvalToken(m[1] ?? ""))
+    .filter((n): n is number => typeof n === "number");
+
+  let whiteBlunders = 0;
+  let whiteMistakes = 0;
+  let whiteInaccuracies = 0;
+  let blackBlunders = 0;
+  let blackMistakes = 0;
+  let blackInaccuracies = 0;
+  let whiteBrilliants = 0;
+  let blackBrilliants = 0;
+
+  for (let i = 1; i < evals.length; i += 1) {
+    const prev = evals[i - 1];
+    const curr = evals[i];
+    const mover = i % 2 === 0 ? "white" : "black";
+    const prevPerspective = mover === "white" ? prev : -prev;
+    const currPerspective = mover === "white" ? curr : -curr;
+    const swing = currPerspective - prevPerspective;
+
+    if (swing <= -2.0) {
+      if (mover === "white") whiteBlunders += 1;
+      else blackBlunders += 1;
+    } else if (swing <= -1.0) {
+      if (mover === "white") whiteMistakes += 1;
+      else blackMistakes += 1;
+    } else if (swing <= -0.5) {
+      if (mover === "white") whiteInaccuracies += 1;
+      else blackInaccuracies += 1;
+    } else if (swing >= 2.0) {
+      if (mover === "white") whiteBrilliants += 1;
+      else blackBrilliants += 1;
+    }
+  }
+
+  return {
+    hasEvalData: evals.length >= 2,
+    whiteBlunders,
+    whiteMistakes,
+    whiteInaccuracies,
+    blackBlunders,
+    blackMistakes,
+    blackInaccuracies,
+    whiteBrilliants,
+    blackBrilliants,
+  };
+}
+
 function parsePgnHeaders(pgnText: string): ParsedChessGame[] {
   const chunks = pgnText
     .split(/\r?\n\r?\n(?=\[Event\s)/)
@@ -97,6 +266,14 @@ function parsePgnHeaders(pgnText: string): ParsedChessGame[] {
       return Number.isFinite(n) ? n : null;
     };
 
+    const movesText = chunk
+      .split(/\r?\n/)
+      .filter((line) => !line.startsWith("["))
+      .join(" ");
+    const evalQuality = parseMoveQualityFromEvals(movesText);
+    const annotationQuality = parseMoveQualityFromAnnotations(movesText);
+    const quality = evalQuality.hasEvalData ? evalQuality : annotationQuality;
+
     return {
       date: parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate : null,
       white: headerValue(chunk, "White"),
@@ -108,6 +285,14 @@ function parsePgnHeaders(pgnText: string): ParsedChessGame[] {
       timeControl: headerValue(chunk, "TimeControl") || "Unknown",
       termination: headerValue(chunk, "Termination") || "Unknown",
       moveCount: (chunk.match(/\b\d+\.(?!\.)/g) ?? []).length,
+      annotationBlunders: quality.whiteBlunders,
+      annotationMistakes: quality.whiteMistakes,
+      annotationInaccuracies: quality.whiteInaccuracies,
+      annotationBrilliants: quality.whiteBrilliants,
+      blackBlunders: quality.blackBlunders,
+      blackMistakes: quality.blackMistakes,
+      blackInaccuracies: quality.blackInaccuracies,
+      blackBrilliants: quality.blackBrilliants,
     };
   });
 }
@@ -150,6 +335,10 @@ function buildPlayerPerspective(games: ParsedChessGame[]) {
       timeControl: g.timeControl,
       termination: g.termination,
       moveCount: g.moveCount,
+      annotationBlunders: isWhite ? g.annotationBlunders : g.blackBlunders,
+      annotationMistakes: isWhite ? g.annotationMistakes : g.blackMistakes,
+      annotationInaccuracies: isWhite ? g.annotationInaccuracies : g.blackInaccuracies,
+      annotationBrilliants: isWhite ? g.annotationBrilliants : g.blackBrilliants,
     };
   });
 
@@ -173,7 +362,19 @@ function buildChessSummary(games: ParsedChessGame[]): ChessSummary | null {
   let opponentCount = 0;
   const ratingSeries: Array<{ label: string; rating: number }> = [];
   const openings = new Map<string, { games: number; wins: number }>();
+  const openingTypes = new Map<string, { games: number; wins: number }>();
   const gameResults: Array<"W" | "D" | "L"> = [];
+  let totalBlunders = 0;
+  let totalMistakes = 0;
+  let totalInaccuracies = 0;
+  let totalBrilliants = 0;
+  const signalRows: Array<{
+    game: string;
+    blunders: number;
+    mistakes: number;
+    inaccuracies: number;
+    brilliants: number;
+  }> = [];
 
   const toResult = (g: PlayerChessGame) => {
     if (g.myColor === "White") whiteGames += 1;
@@ -207,6 +408,24 @@ function buildChessSummary(games: ParsedChessGame[]): ChessSummary | null {
     row.games += 1;
     if (g.myResult === "win") row.wins += 1;
     openings.set(g.eco, row);
+
+    const typeLabel = openingTypeFromEco(g.eco);
+    const typeRow = openingTypes.get(typeLabel) ?? { games: 0, wins: 0 };
+    typeRow.games += 1;
+    if (g.myResult === "win") typeRow.wins += 1;
+    openingTypes.set(typeLabel, typeRow);
+
+    totalBlunders += g.annotationBlunders;
+    totalMistakes += g.annotationMistakes;
+    totalInaccuracies += g.annotationInaccuracies;
+    totalBrilliants += g.annotationBrilliants;
+    signalRows.push({
+      game: g.date ? g.date.toISOString().slice(0, 10) : `Game ${signalRows.length + 1}`,
+      blunders: g.annotationBlunders,
+      mistakes: g.annotationMistakes,
+      inaccuracies: g.annotationInaccuracies,
+      brilliants: g.annotationBrilliants,
+    });
   };
 
   scoped.forEach(toResult);
@@ -221,10 +440,20 @@ function buildChessSummary(games: ParsedChessGame[]): ChessSummary | null {
     .sort((a, b) => b.games - a.games)
     .slice(0, 8);
 
+  const openingTypeRows = [...openingTypes.entries()]
+    .map(([label, row]) => ({
+      label,
+      games: row.games,
+      winRate: row.games > 0 ? (row.wins / row.games) * 100 : 0,
+    }))
+    .sort((a, b) => b.games - a.games)
+    .slice(0, 6);
+
   const totalGames = scoped.length;
   const whiteWinRate = whiteGames > 0 ? (whiteWins / whiteGames) * 100 : 0;
   const blackWinRate = blackGames > 0 ? (blackWins / blackGames) * 100 : 0;
   const avgOpponent = opponentCount > 0 ? Math.round(opponentSum / opponentCount) : null;
+  const avgBlundersPerGame = totalGames > 0 ? totalBlunders / totalGames : 0;
 
   const recent = ratingSeries.slice(-15).map((r) => r.rating);
   const prior = ratingSeries.slice(-30, -15).map((r) => r.rating);
@@ -274,7 +503,14 @@ function buildChessSummary(games: ParsedChessGame[]): ChessSummary | null {
     avgOpponent,
     ratingSeries,
     openingRows,
+    openingTypeRows,
     gameResults,
+    signalRows,
+    totalBlunders,
+    totalMistakes,
+    totalInaccuracies,
+    totalBrilliants,
+    avgBlundersPerGame,
     insights,
   };
 }
@@ -306,7 +542,8 @@ function buildAiCoachReport(games: ParsedChessGame[], sampleSize: number): Coach
       return br - ar;
     })[0];
 
-  const title = `GM Coach: Last ${sampleSize} Game${sampleSize > 1 ? "s" : ""}`;
+  const title =
+    sampleSize === 1 ? "GM Coach: Most Recent Game" : `GM Coach: Last ${sampleSize} Games`;
 
   let summary = "";
   if (wins === sampleSize) {
@@ -343,6 +580,11 @@ function buildAiCoachReport(games: ParsedChessGame[], sampleSize: number): Coach
     "After each game, annotate the first irreversible mistake and one move before it that allowed it.",
     "For the next 10 games, play for position first; only calculate forcing lines once king safety is verified.",
   ];
+  const quickFixes = [
+    focusParts[0] ?? "Play one principled opening line and avoid early tactical detours.",
+    focusParts[1] ?? "Add a 10-second blunder check before every move in sharp positions.",
+    "After each game, note your first major evaluation drop and the decision before it.",
+  ];
 
   const lossByEco = new Map<string, number>();
   const avgMoveCount =
@@ -357,14 +599,14 @@ function buildAiCoachReport(games: ParsedChessGame[], sampleSize: number): Coach
   const mostPunishedEco = [...lossByEco.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
   const secretInsights = [
     mostPunishedEco
-      ? `Secret edge: opponents are scoring against you most often in ${mostPunishedEco}. Prepare two model games and one endgame plan from that structure.`
-      : "Secret edge: your opening spread is healthy; focus on converting equal middlegames, not memorizing more lines.",
+      ? `Opponents are scoring against you most often in ${mostPunishedEco}. Prepare two model games and one endgame plan from that structure.`
+      : "Your opening spread is healthy; focus on converting equal middlegames, not memorizing more lines.",
     timeForfeits > 0
-      ? "Secret edge: your clock losses are technique losses in disguise. Use a hard time budget by move 20 and refuse deep side-lines when behind on time."
-      : "Secret edge: your clock control is decent. Convert this into rating by forcing simpler positions when ahead.",
+      ? "Your clock losses are technique losses in disguise. Use a hard time budget by move 20 and refuse deep side-lines when behind on time."
+      : "Your clock control is decent. Convert this into rating by forcing simpler positions when ahead.",
     avgMoveCount < 28
-      ? "Secret edge: your games are ending too early. Build a 'stability phase' between moves 12-20 to avoid premature collapses."
-      : "Secret edge: your games go long enough; train conversion technique in slightly better endgames to turn draws into wins.",
+      ? "Your games are ending too early. Build a 'stability phase' between moves 12-20 to avoid premature collapses."
+      : "Your games go long enough; train conversion technique in slightly better endgames to turn draws into wins.",
   ];
 
   const toScore = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
@@ -405,47 +647,340 @@ function buildAiCoachReport(games: ParsedChessGame[], sampleSize: number): Coach
     title,
     summary,
     focus: focusParts.slice(0, 2).join(" "),
+    quickFixes,
     checklist,
     secretInsights,
     visuals,
   };
 }
 
-function MiniLineChart({ values }: { values: number[] }) {
-  if (values.length < 2) {
+function MiniLineChart({ series }: { series: Array<{ label: string; rating: number }> }) {
+  if (series.length < 2) {
     return <p className="text-sm text-white/55">Not enough games yet for a trend line.</p>;
   }
 
   const width = 760;
-  const height = 180;
-  const pad = 14;
+  const height = 220;
+  const pad = 18;
+  const leftAxisPad = 56;
+  const bottomAxisPad = 30;
+  const plotW = width - leftAxisPad - pad;
+  const plotH = height - bottomAxisPad - pad;
+  const values = series.map((s) => s.rating);
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = Math.max(max - min, 1);
-  const stepX = (width - pad * 2) / (values.length - 1);
-  const points = values
-    .map((v, i) => {
-      const x = pad + i * stepX;
-      const y = height - pad - ((v - min) / range) * (height - pad * 2);
+  const stepX = plotW / (values.length - 1);
+  const points = series
+    .map((s, i) => {
+      const x = leftAxisPad + i * stepX;
+      const y = plotH + pad - ((s.rating - min) / range) * plotH;
       return `${x},${y}`;
     })
     .join(" ");
+  const horizontalGrid = 4;
+  const verticalGrid = 6;
+  const yTicks = Array.from({ length: horizontalGrid + 1 }).map((_, i) => {
+    const t = i / horizontalGrid;
+    return Math.round(max - t * (max - min));
+  });
+  const startLabel = series[0]?.label ?? "";
+  const midLabel = series[Math.floor(series.length / 2)]?.label ?? "";
+  const endLabel = series[series.length - 1]?.label ?? "";
 
   return (
     <div className="rounded-lg border border-white/10 bg-[#0b1320] p-2">
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-44">
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-56">
+        <text x="10" y="18" fill="rgba(203,213,225,0.75)" fontSize="10">
+          Rating
+        </text>
+        {Array.from({ length: horizontalGrid + 1 }).map((_, i) => {
+          const y = pad + (i * plotH) / horizontalGrid;
+          return (
+            <line
+              key={`h-${i}`}
+              x1={leftAxisPad}
+              y1={y}
+              x2={leftAxisPad + plotW}
+              y2={y}
+              stroke="rgba(148,163,184,0.18)"
+              strokeWidth="1"
+            />
+          );
+        })}
+        {yTicks.map((tick, i) => {
+          const y = pad + (i * plotH) / horizontalGrid + 3;
+          return (
+            <text key={`yt-${tick}-${i}`} x="12" y={y} fill="rgba(203,213,225,0.72)" fontSize="10">
+              {tick}
+            </text>
+          );
+        })}
+        {Array.from({ length: verticalGrid + 1 }).map((_, i) => {
+          const x = leftAxisPad + (i * plotW) / verticalGrid;
+          return (
+            <line
+              key={`v-${i}`}
+              x1={x}
+              y1={pad}
+              x2={x}
+              y2={plotH + pad}
+              stroke="rgba(148,163,184,0.12)"
+              strokeWidth="1"
+            />
+          );
+        })}
         <polyline
           fill="none"
           stroke="rgba(34,211,238,0.95)"
           strokeWidth="2.6"
           points={points}
         />
+        <line
+          x1={leftAxisPad}
+          y1={pad}
+          x2={leftAxisPad}
+          y2={plotH + pad}
+          stroke="rgba(148,163,184,0.35)"
+          strokeWidth="1"
+        />
+        <line
+          x1={leftAxisPad}
+          y1={plotH + pad}
+          x2={leftAxisPad + plotW}
+          y2={plotH + pad}
+          stroke="rgba(148,163,184,0.35)"
+          strokeWidth="1"
+        />
+        <text x={leftAxisPad} y={height - 8} fill="rgba(203,213,225,0.72)" fontSize="10">
+          {startLabel}
+        </text>
+        <text
+          x={leftAxisPad + plotW / 2}
+          y={height - 8}
+          fill="rgba(203,213,225,0.72)"
+          fontSize="10"
+          textAnchor="middle"
+        >
+          {midLabel}
+        </text>
+        <text
+          x={leftAxisPad + plotW}
+          y={height - 8}
+          fill="rgba(203,213,225,0.72)"
+          fontSize="10"
+          textAnchor="end"
+        >
+          {endLabel}
+        </text>
+        <text
+          x={leftAxisPad + plotW / 2}
+          y={height - 20}
+          fill="rgba(203,213,225,0.72)"
+          fontSize="10"
+          textAnchor="middle"
+        >
+          Date
+        </text>
       </svg>
-      <div className="flex items-center justify-between text-xs text-white/60 px-1">
-        <span>Start: {values[0]}</span>
-        <span>Peak: {max}</span>
-        <span>Latest: {values[values.length - 1]}</span>
-      </div>
+    </div>
+  );
+}
+
+function MiniSignalsChart({
+  rows,
+}: {
+  rows: Array<{
+    game: string;
+    blunders: number;
+    mistakes: number;
+    inaccuracies: number;
+    brilliants: number;
+  }>;
+}) {
+  if (rows.length === 0) {
+    return <p className="text-sm text-white/55">No move-quality data available yet.</p>;
+  }
+
+  const totals = rows.reduce(
+    (acc, row) => {
+      acc.blunders += row.blunders;
+      acc.mistakes += row.mistakes;
+      acc.inaccuracies += row.inaccuracies;
+      acc.brilliants += row.brilliants;
+      return acc;
+    },
+    { blunders: 0, mistakes: 0, inaccuracies: 0, brilliants: 0 }
+  );
+  const data = [
+    { label: "Blunders", value: totals.blunders, color: "rgba(251,113,133,0.92)" },
+    { label: "Mistakes", value: totals.mistakes, color: "rgba(251,191,36,0.92)" },
+    { label: "Inaccuracies", value: totals.inaccuracies, color: "rgba(96,165,250,0.92)" },
+    { label: "Brilliants", value: totals.brilliants, color: "rgba(110,231,183,0.92)" },
+  ];
+  const width = 760;
+  const height = 240;
+  const pad = 16;
+  const leftAxisPad = 48;
+  const bottomAxisPad = 42;
+  const plotW = width - leftAxisPad - pad;
+  const plotH = height - bottomAxisPad - pad;
+  const maxVal = Math.max(...data.map((d) => d.value), 1);
+  const groupWidth = plotW / data.length;
+  const barWidth = Math.min(54, groupWidth * 0.5);
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#0b1320] p-2">
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-60">
+        {Array.from({ length: 5 }).map((_, i) => {
+          const y = pad + (i * plotH) / 4;
+          return (
+            <line
+              key={`sg-h-${i}`}
+              x1={leftAxisPad}
+              y1={y}
+              x2={leftAxisPad + plotW}
+              y2={y}
+              stroke="rgba(148,163,184,0.16)"
+              strokeWidth="1"
+            />
+          );
+        })}
+        {data.map((item, i) => {
+          const xCenter = leftAxisPad + groupWidth * i + groupWidth / 2;
+          const h = (item.value / maxVal) * plotH;
+          const y = plotH + pad - h;
+          return (
+            <g key={item.label}>
+              <rect
+                x={xCenter - barWidth / 2}
+                y={y}
+                width={barWidth}
+                height={Math.max(2, h)}
+                rx={6}
+                fill={item.color}
+              />
+              <text
+                x={xCenter}
+                y={y - 6}
+                fill="rgba(226,232,240,0.9)"
+                fontSize="10"
+                textAnchor="middle"
+              >
+                {item.value}
+              </text>
+              <text
+                x={xCenter}
+                y={height - 8}
+                fill="rgba(203,213,225,0.8)"
+                fontSize="10"
+                textAnchor="middle"
+              >
+                {item.label}
+              </text>
+            </g>
+          );
+        })}
+        <line
+          x1={leftAxisPad}
+          y1={plotH + pad}
+          x2={leftAxisPad + plotW}
+          y2={plotH + pad}
+          stroke="rgba(148,163,184,0.35)"
+          strokeWidth="1"
+        />
+        <text x={8} y={18} fill="rgba(203,213,225,0.75)" fontSize="10">
+          Total Count
+        </text>
+        {Array.from({ length: 5 }).map((_, i) => {
+          const value = Math.round(maxVal - (i * maxVal) / 4);
+          const y = pad + (i * plotH) / 4 + 3;
+          return (
+            <text key={`metric-y-${i}`} x="12" y={y} fill="rgba(203,213,225,0.72)" fontSize="10">
+              {value}
+            </text>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function BlunderTrendChart({
+  rows,
+}: {
+  rows: Array<{
+    game: string;
+    blunders: number;
+    mistakes: number;
+    inaccuracies: number;
+    brilliants: number;
+  }>;
+}) {
+  if (rows.length < 2) {
+    return <p className="text-sm text-white/55">Need at least 2 games for a blunder trend.</p>;
+  }
+  const width = 760;
+  const height = 180;
+  const pad = 16;
+  const leftAxisPad = 44;
+  const bottomAxisPad = 26;
+  const plotW = width - leftAxisPad - pad;
+  const plotH = height - bottomAxisPad - pad;
+  const maxVal = Math.max(...rows.map((r) => r.blunders), 1);
+  const stepX = plotW / (rows.length - 1);
+  const points = rows
+    .map((r, i) => `${leftAxisPad + i * stepX},${plotH + pad - (r.blunders / maxVal) * plotH}`)
+    .join(" ");
+  const yTicks = Array.from({ length: 4 }).map((_, i) => Math.round(maxVal - (i * maxVal) / 3));
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#0b1320] p-2 mt-3">
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-44">
+        {Array.from({ length: 4 }).map((_, i) => {
+          const y = pad + (i * plotH) / 3;
+          return (
+            <line
+              key={`bt-h-${i}`}
+              x1={leftAxisPad}
+              y1={y}
+              x2={leftAxisPad + plotW}
+              y2={y}
+              stroke="rgba(148,163,184,0.16)"
+              strokeWidth="1"
+            />
+          );
+        })}
+        {yTicks.map((tick, i) => {
+          const y = pad + (i * plotH) / 3 + 3;
+          return (
+            <text key={`bt-yt-${tick}-${i}`} x="12" y={y} fill="rgba(203,213,225,0.72)" fontSize="10">
+              {tick}
+            </text>
+          );
+        })}
+        <polyline fill="none" stroke="rgba(251,113,133,0.95)" strokeWidth="2.2" points={points} />
+        <line
+          x1={leftAxisPad}
+          y1={plotH + pad}
+          x2={leftAxisPad + plotW}
+          y2={plotH + pad}
+          stroke="rgba(148,163,184,0.35)"
+          strokeWidth="1"
+        />
+        <text x={leftAxisPad} y={height - 8} fill="rgba(203,213,225,0.72)" fontSize="10">
+          {rows[0]?.game}
+        </text>
+        <text
+          x={leftAxisPad + plotW}
+          y={height - 8}
+          fill="rgba(203,213,225,0.72)"
+          fontSize="10"
+          textAnchor="end"
+        >
+          {rows[rows.length - 1]?.game}
+        </text>
+      </svg>
     </div>
   );
 }
@@ -459,9 +994,11 @@ export default function HobbyDetail() {
   const [pgnError, setPgnError] = useState("");
   const [lastSyncedAt, setLastSyncedAt] = useState<string>("");
   const [syncSource, setSyncSource] = useState<string>("");
-  const [lichessUsername, setLichessUsername] = useState("zaibao1");
-  const [analysisWindow, setAnalysisWindow] = useState<number>(5);
+  const [analysisWindow, setAnalysisWindow] = useState<number>(1);
+  const [signalsWindow, setSignalsWindow] = useState<number>(1);
   const [coachReport, setCoachReport] = useState<CoachReport | null>(null);
+  const [ratingWindow, setRatingWindow] = useState<number>(60);
+  const lichessUsername = "zaibao1";
   const isLocalDev =
     typeof window !== "undefined" &&
     (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
@@ -481,11 +1018,11 @@ export default function HobbyDetail() {
     setPgnError("");
     setCoachReport(null);
 
-    const username = lichessUsername.trim() || "zaibao1";
+    const username = lichessUsername;
     const snapshotUrl = `/api/chess-sync?username=${encodeURIComponent(username)}&max=220`;
     const directUrl = `https://lichess.org/api/games/user/${encodeURIComponent(
       username
-    )}?max=220&opening=true&moves=true&pgnInJson=false&format=pgn`;
+    )}?max=220&opening=true&moves=true&evals=true&pgnInJson=false&format=pgn`;
 
     try {
       if (isLocalDev) {
@@ -560,7 +1097,7 @@ export default function HobbyDetail() {
 
   useEffect(() => {
     if (!isChess) return;
-    const username = lichessUsername.trim() || "zaibao1";
+    const username = lichessUsername;
     const loadSnapshot = async () => {
       if (isLocalDev) {
         await syncChessData();
@@ -576,6 +1113,10 @@ export default function HobbyDetail() {
         }
         const data = await res.json();
         if (!data?.pgn || !isValidPgn(data.pgn)) {
+          await syncChessData();
+          return;
+        }
+        if (!/\[%eval\s+[^\]\s]+\]/.test(data.pgn)) {
           await syncChessData();
           return;
         }
@@ -602,11 +1143,37 @@ export default function HobbyDetail() {
     () => (parsedChessGames.length > 0 ? buildChessSummary(parsedChessGames) : null),
     [parsedChessGames]
   );
+  const ratingSeriesWindow = useMemo(() => {
+    if (!chessSummary) return [];
+    const total = chessSummary.ratingSeries.length;
+    if (ratingWindow >= total) return chessSummary.ratingSeries;
+    return chessSummary.ratingSeries.slice(-ratingWindow);
+  }, [chessSummary, ratingWindow]);
+  const signalRowsWindow = useMemo(() => {
+    if (!chessSummary) return [];
+    const total = chessSummary.signalRows.length;
+    if (signalsWindow >= total) return chessSummary.signalRows;
+    return chessSummary.signalRows.slice(-signalsWindow);
+  }, [chessSummary, signalsWindow]);
+  const trendRowsWindow = useMemo(() => {
+    if (!chessSummary) return [];
+    return chessSummary.signalRows;
+  }, [chessSummary]);
+  const effectiveAnalysisWindow = useMemo(() => {
+    const total = parsedChessGames.length;
+    if (total === 0) return 1;
+    if (analysisWindow === -1) return total;
+    return Math.max(1, Math.min(analysisWindow, total));
+  }, [analysisWindow, parsedChessGames.length]);
 
-  const runCoachAnalysis = () => {
-    const report = buildAiCoachReport(parsedChessGames, analysisWindow);
+  useEffect(() => {
+    if (!isChess || parsedChessGames.length === 0) {
+      setCoachReport(null);
+      return;
+    }
+    const report = buildAiCoachReport(parsedChessGames, effectiveAnalysisWindow);
     setCoachReport(report);
-  };
+  }, [effectiveAnalysisWindow, isChess, parsedChessGames]);
 
   if (!hobby) {
     return (
@@ -633,70 +1200,59 @@ export default function HobbyDetail() {
               <h1 className="section-title">{hobby.title}</h1>
               <p className="text-white/70">{hobby.summary}</p>
             </div>
-            <Link to="/#hobbies" className="showcase-cta-secondary">
-              Back to Hobbies
-            </Link>
+            {isChess ? (
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] uppercase tracking-wider ${
+                  syncStatus === "ok"
+                    ? "border-emerald-300/40 bg-emerald-300/10 text-emerald-100"
+                    : syncStatus === "syncing"
+                      ? "border-cyan-300/45 bg-cyan-300/12 text-cyan-100"
+                      : syncStatus === "error"
+                        ? "border-rose-300/45 bg-rose-300/12 text-rose-100"
+                        : "border-white/20 bg-white/5 text-white/70"
+                }`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    syncStatus === "ok"
+                      ? "bg-emerald-300"
+                      : syncStatus === "syncing"
+                        ? "bg-cyan-300"
+                        : syncStatus === "error"
+                          ? "bg-rose-300"
+                          : "bg-white/50"
+                  }`}
+                />
+                {syncStatus === "ok"
+                  ? "Synced"
+                  : syncStatus === "syncing"
+                    ? "Syncing"
+                    : syncStatus === "error"
+                      ? "Sync Failed"
+                      : "Not Synced"}
+              </span>
+            ) : (
+              <Link to="/#hobbies" className="showcase-cta-secondary">
+                Back to Hobbies
+              </Link>
+            )}
           </div>
           <p className="text-white/75 mt-4 max-w-3xl">{hobby.description}</p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {hobby.tags.map((tag) => (
-              <span key={tag} className="showcase-chip">
-                {tag}
-              </span>
-            ))}
-          </div>
-        </section>
-
-        {isChess ? (
-          <section className="showcase-card p-6 md:p-8">
-            <p className="section-kicker">Chess Intelligence</p>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="section-title">Game Progress Dashboard</h2>
-              <div className="flex items-center gap-2 flex-wrap justify-end">
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] uppercase tracking-wider ${
-                    syncStatus === "ok"
-                      ? "border-emerald-300/40 bg-emerald-300/10 text-emerald-100"
-                      : syncStatus === "syncing"
-                        ? "border-cyan-300/45 bg-cyan-300/12 text-cyan-100"
-                        : syncStatus === "error"
-                          ? "border-rose-300/45 bg-rose-300/12 text-rose-100"
-                          : "border-white/20 bg-white/5 text-white/70"
-                  }`}
-                >
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      syncStatus === "ok"
-                        ? "bg-emerald-300"
-                        : syncStatus === "syncing"
-                          ? "bg-cyan-300"
-                          : syncStatus === "error"
-                            ? "bg-rose-300"
-                            : "bg-white/50"
-                    }`}
-                  />
-                  {syncStatus === "ok"
-                    ? "Synced"
-                    : syncStatus === "syncing"
-                      ? "Syncing"
-                      : syncStatus === "error"
-                        ? "Sync Failed"
-                        : "Not Synced"}
+          {hobby.tags.length > 0 ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {hobby.tags.map((tag) => (
+                <span key={tag} className="showcase-chip">
+                  {tag}
                 </span>
-                <input
-                  value={lichessUsername}
-                  onChange={(e) => setLichessUsername(e.target.value)}
-                  placeholder="Lichess username"
-                  className="rounded-lg border border-white/15 bg-[#0b1320] px-3 py-2 text-sm text-white/85 w-40 sm:w-48"
-                />
-                <button
-                  type="button"
-                  onClick={() => void syncChessData()}
-                  className="showcase-cta-secondary"
-                >
-                  Sync Live
-                </button>
-              </div>
+              ))}
+            </div>
+          ) : null}
+
+          {isChess ? (
+            <div className="mt-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="section-title">Dashboards</h2>
+              <div />
             </div>
             {lastSyncedAt ? (
               <p className="text-xs text-white/50 -mt-2 mb-2">
@@ -705,7 +1261,7 @@ export default function HobbyDetail() {
               </p>
             ) : null}
             <p className="text-xs text-white/55 mb-2">
-              Snapshot-first sync with Supabase. Cron refreshes in Vercel, and Sync Live forces a fresh pull.
+              Snapshot-first sync with Supabase. On the Hobby plan, dashboard updates are shown once per day.
             </p>
             {pgnLoading ? <p className="text-white/65">Loading PGN data...</p> : null}
             {pgnError ? <p className="text-red-300/85">{pgnError}</p> : null}
@@ -741,11 +1297,60 @@ export default function HobbyDetail() {
                 </div>
 
                 <div className="showcase-inner-card">
-                  <p className="text-sm uppercase tracking-wider text-white/60 mb-2 inline-flex items-center gap-2">
-                    Rating Trend
-                    <HoverHelp text="Tracks rating trajectory over time. A flat trend with fewer drops is often better than volatile spikes." />
-                  </p>
-                  <MiniLineChart values={chessSummary.ratingSeries.map((r) => r.rating)} />
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <p className="text-sm uppercase tracking-wider text-white/60 inline-flex items-center gap-2">
+                      Rating Trend
+                      <HoverHelp text="Tracks rating trajectory over time. A flat trend with fewer drops is often better than volatile spikes." />
+                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setRatingWindow((w) => Math.max(10, w - 10))}
+                        className="h-7 w-7 rounded border border-white/20 bg-white/5 text-white/80 hover:bg-white/10"
+                        aria-label="Zoom in rating trend"
+                      >
+                        +
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setRatingWindow((w) =>
+                            Math.min(chessSummary.ratingSeries.length, w + 10)
+                          )
+                        }
+                        className="h-7 w-7 rounded border border-white/20 bg-white/5 text-white/80 hover:bg-white/10"
+                        aria-label="Zoom out rating trend"
+                      >
+                        -
+                      </button>
+                    </div>
+                  </div>
+                  <MiniLineChart series={ratingSeriesWindow} />
+                </div>
+
+                <div className="showcase-inner-card py-2 px-3">
+                  <div className="grid grid-cols-3 gap-2 text-xs sm:text-sm">
+                    <p className="text-white/70">
+                      Start:{" "}
+                      <span className="text-white/95 font-semibold">
+                        {ratingSeriesWindow[0]?.rating ?? "-"}
+                      </span>
+                    </p>
+                    <p className="text-white/70 text-center">
+                      Peak:{" "}
+                      <span className="text-white/95 font-semibold">
+                        {ratingSeriesWindow.length > 0
+                          ? Math.max(...ratingSeriesWindow.map((r) => r.rating))
+                          : "-"}
+                      </span>
+                    </p>
+                    <p className="text-white/70 text-right">
+                      Latest:{" "}
+                      <span className="text-white/95 font-semibold">
+                        {ratingSeriesWindow[ratingSeriesWindow.length - 1]?.rating ?? "-"}
+                      </span>
+                    </p>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -790,12 +1395,15 @@ export default function HobbyDetail() {
                       <HoverHelp text="Opening families inferred from ECO codes to show what you're using most often." />
                     </p>
                     <div className="space-y-2">
-                      {chessSummary.openingRows.length > 0 ? (
-                        chessSummary.openingRows.map((row) => (
-                          <div key={row.eco}>
+                      {chessSummary.openingTypeRows.length > 0 ? (
+                        chessSummary.openingTypeRows.map((row) => (
+                          <div key={row.label}>
                             <div className="flex items-center justify-between text-sm text-white/80">
-                              <span>{openingTypeFromEco(row.eco)} ({row.eco})</span>
-                              <span>{row.games}g · {row.winRate.toFixed(0)}%</span>
+                              <span className="inline-flex items-center gap-1.5">
+                                {row.label}
+                                <HoverHelp text={openingMoveHint(row.label)} />
+                              </span>
+                              <span>{row.games} games · {row.winRate.toFixed(0)}% win rate</span>
                             </div>
                             <div className="mt-1 h-2 rounded-full bg-white/10">
                               <div
@@ -812,45 +1420,76 @@ export default function HobbyDetail() {
                   </article>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <article className="showcase-inner-card">
-                    <p className="text-sm uppercase tracking-wider text-white/60 mb-2 inline-flex items-center gap-2">
-                      Opening Win Rate
-                      <HoverHelp text="Win rate by ECO line. Higher sample size gives more reliable signals." />
+                <article className="showcase-inner-card">
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                    <p className="text-sm uppercase tracking-wider text-white/60 inline-flex items-center gap-2">
+                      Signals
+                      <HoverHelp text="Calculated from Lichess engine eval swings per move (free source), not static PGN annotation tags." />
                     </p>
-                    <div className="space-y-2">
-                      {chessSummary.openingRows.length > 0 ? (
-                        chessSummary.openingRows.map((row) => (
-                          <div key={row.eco}>
-                            <div className="flex items-center justify-between text-sm text-white/80">
-                              <span>{row.eco}</span>
-                              <span>{row.games}g · {row.winRate.toFixed(0)}%</span>
-                            </div>
-                            <div className="mt-1 h-2 rounded-full bg-white/10">
-                              <div
-                                className="h-2 rounded-full bg-cyan-300/80"
-                                style={{ width: `${Math.max(4, row.winRate)}%` }}
-                              />
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-white/55 text-sm">Play more games to populate opening stats.</p>
-                      )}
-                    </div>
-                  </article>
-
-                  <article className="showcase-inner-card">
-                    <p className="text-sm uppercase tracking-wider text-white/60 mb-2">
-                      What To Improve Next
-                    </p>
-                    <ul className="list-disc list-inside space-y-1.5 text-white/78 text-sm">
-                      {chessSummary.insights.map((line) => (
-                        <li key={line}>{line}</li>
+                    <select
+                      value={signalsWindow}
+                      onChange={(e) => setSignalsWindow(Number(e.target.value))}
+                      className="rounded-lg border border-white/15 bg-[#0b1320] px-2.5 py-1.5 text-sm text-white/85"
+                    >
+                      {WINDOW_OPTIONS.map((n) => (
+                        <option key={n} value={n}>
+                          {n === 1 ? "Most Recent Game" : `Last ${n} Games`}
+                        </option>
                       ))}
-                    </ul>
-                  </article>
-                </div>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
+                    <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm">
+                      <p className="text-[11px] uppercase tracking-wider text-white/55">Blunders</p>
+                      <p className="text-white/90 font-semibold">
+                        {signalRowsWindow[signalRowsWindow.length - 1]?.blunders ?? 0}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm">
+                      <p className="text-[11px] uppercase tracking-wider text-white/55">Mistakes</p>
+                      <p className="text-white/90 font-semibold">
+                        {signalRowsWindow[signalRowsWindow.length - 1]?.mistakes ?? 0}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm">
+                      <p className="text-[11px] uppercase tracking-wider text-white/55">Inaccuracies</p>
+                      <p className="text-white/90 font-semibold">
+                        {signalRowsWindow[signalRowsWindow.length - 1]?.inaccuracies ?? 0}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm">
+                      <p className="text-[11px] uppercase tracking-wider text-white/55">Brilliants</p>
+                      <p className="text-white/90 font-semibold">
+                        {signalRowsWindow[signalRowsWindow.length - 1]?.brilliants ?? 0}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm">
+                      <p className="text-[11px] uppercase tracking-wider text-white/55">Avg Blunders / Game</p>
+                      <p className="text-white/90 font-semibold">
+                        {signalRowsWindow.length > 0
+                          ? (
+                              signalRowsWindow.reduce((sum, row) => sum + row.blunders, 0) /
+                              signalRowsWindow.length
+                            ).toFixed(2)
+                          : "0.00"}
+                      </p>
+                    </div>
+                  </div>
+                  <MiniSignalsChart rows={signalRowsWindow} />
+                </article>
+
+                <article className="showcase-inner-card">
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                    <p className="text-sm uppercase tracking-wider text-white/60 inline-flex items-center gap-2">
+                      Blunder Trend
+                      <HoverHelp text="Trend line for blunders across your full game history." />
+                    </p>
+                    <span className="rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-xs text-white/65">
+                      All Games
+                    </span>
+                  </div>
+                  <BlunderTrendChart rows={trendRowsWindow} />
+                </article>
 
                 <article className="showcase-inner-card">
                   <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
@@ -864,19 +1503,18 @@ export default function HobbyDetail() {
                         onChange={(e) => setAnalysisWindow(Number(e.target.value))}
                         className="rounded-lg border border-white/15 bg-[#0b1320] px-2.5 py-1.5 text-sm text-white/85"
                       >
-                        <option value={1}>Last 1 Game</option>
-                        <option value={5}>Last 5 Games</option>
-                        <option value={10}>Last 10 Games</option>
-                        <option value={20}>Last 20 Games</option>
+                        <option value={1}>Most Recent Game</option>
+                        {WINDOW_OPTIONS.filter((n) => n > 1).map((n) => (
+                          <option key={`coach-window-${n}`} value={n}>
+                            {`Last ${n} Games`}
+                          </option>
+                        ))}
+                        <option value={-1}>All Games</option>
                       </select>
-                      <button type="button" onClick={runCoachAnalysis} className="showcase-cta-primary">
-                        Analyze
-                      </button>
                     </div>
                   </div>
                   {coachReport ? (
                     <div className="space-y-2.5 text-sm text-white/80">
-                      <p className="font-semibold text-cyan-100">{coachReport.title}</p>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                         <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2">
                           <p className="text-[11px] uppercase tracking-wider text-white/55 mb-1">Position</p>
@@ -886,6 +1524,16 @@ export default function HobbyDetail() {
                           <p className="text-[11px] uppercase tracking-wider text-white/55 mb-1">Primary Focus</p>
                           <p>{coachReport.focus}</p>
                         </div>
+                      </div>
+                      <div className="rounded-md border border-cyan-300/20 bg-cyan-300/5 px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-wider text-cyan-100/80 mb-1">
+                          What To Improve Right Now
+                        </p>
+                        <ul className="list-disc list-inside space-y-1 text-white/80">
+                          {coachReport.quickFixes.map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
                       </div>
                       <ul className="list-disc list-inside space-y-1 text-white/72">
                         {coachReport.checklist.map((item) => (
@@ -929,7 +1577,7 @@ export default function HobbyDetail() {
                     </div>
                   ) : (
                     <p className="text-sm text-white/60">
-                      Click Analyze to generate a coaching summary from your recent games.
+                      Loading coach analysis from your latest synced games.
                     </p>
                   )}
                 </article>
@@ -937,13 +1585,13 @@ export default function HobbyDetail() {
             ) : !pgnLoading && !chessSummary ? (
               <div className="showcase-inner-card">
                 <p className="text-white/70">
-                  No parsed chess data yet. Click <span className="font-semibold">Sync Live</span> to
-                  pull your latest games.
+                  No parsed chess data yet. Wait for daily sync or check Supabase setup.
                 </p>
               </div>
             ) : null}
-          </section>
-        ) : null}
+            </div>
+          ) : null}
+        </section>
 
         {!isChess && hobby.links && hobby.links.length > 0 ? (
           <section className="showcase-card p-6 md:p-8">
@@ -993,19 +1641,6 @@ export default function HobbyDetail() {
           </section>
         ) : null}
 
-        <section className="showcase-card p-6 md:p-8">
-          <p className="section-kicker">Explore</p>
-          <h2 className="section-title">Other Hobbies</h2>
-          <div className="flex flex-wrap gap-2">
-            {hobbies
-              .filter((item) => item.slug !== hobby.slug)
-              .map((item) => (
-                <Link key={item.slug} to={`/hobby/${item.slug}`} className="showcase-chip">
-                  {item.title}
-                </Link>
-              ))}
-          </div>
-        </section>
       </div>
     </div>
   );

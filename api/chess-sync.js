@@ -8,7 +8,11 @@ function gameCountFromPgn(pgn) {
   return (pgn.match(/\[Event\s+"/g) ?? []).length;
 }
 
-async function fetchFirstValidPgn(urls) {
+function hasEvalData(text) {
+  return /\[%eval\s+[^\]\s]+\]/.test(text);
+}
+
+async function fetchFirstValidPgn(urls, { requireEval = false } = {}) {
   for (const url of urls) {
     try {
       const res = await fetch(url, {
@@ -20,6 +24,7 @@ async function fetchFirstValidPgn(urls) {
       if (!res.ok) continue;
       const text = await res.text();
       if (!isValidPgn(text)) continue;
+      if (requireEval && !hasEvalData(text)) continue;
       return { pgn: text, source: url };
     } catch {
       // try next source
@@ -47,12 +52,17 @@ export default async function handler(req, res) {
 
   const exportUrl = `https://lichess.org/games/export/${encodeURIComponent(
     username
-  )}?moves=true&tags=true`;
+  )}?moves=true&tags=true&evals=true`;
   const apiUrl = `https://lichess.org/api/games/user/${encodeURIComponent(
     username
-  )}?max=${max}&opening=true&moves=true&pgnInJson=false&format=pgn`;
+  )}?max=${max}&opening=true&moves=true&evals=true&pgnInJson=false&format=pgn`;
 
-  const { pgn, source } = await fetchFirstValidPgn([exportUrl, apiUrl]);
+  // Prefer eval-rich API payload so quality signals can be computed.
+  let { pgn, source } = await fetchFirstValidPgn([apiUrl, exportUrl], { requireEval: true });
+  // Fallback to any valid PGN if evals are unavailable.
+  if (!pgn) {
+    ({ pgn, source } = await fetchFirstValidPgn([apiUrl, exportUrl]));
+  }
   if (!pgn) {
     return res.status(502).json({ error: "Unable to fetch valid PGN from Lichess" });
   }
