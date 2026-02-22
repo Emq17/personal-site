@@ -1194,11 +1194,11 @@ export default function HobbyDetail() {
     <div className="px-4 pb-20">
       <div className="mx-auto max-w-5xl space-y-6">
         <section className="showcase-card p-6 md:p-8">
-          <p className="section-kicker">Hobby Detail</p>
+          {!isChess ? <p className="section-kicker mb-2">Hobby Detail</p> : null}
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h1 className="section-title">{hobby.title}</h1>
-              <p className="text-white/70">{hobby.summary}</p>
+              {!isChess ? <h1 className="section-title">{hobby.title}</h1> : null}
+              {!isChess ? <p className="text-white/70">{hobby.summary}</p> : null}
             </div>
             {isChess ? (
               <span
@@ -1237,8 +1237,10 @@ export default function HobbyDetail() {
               </Link>
             )}
           </div>
-          <p className="text-white/75 mt-4 max-w-3xl">{hobby.description}</p>
-          {hobby.tags.length > 0 ? (
+          {!isChess && hobby.description ? (
+            <p className="text-white/75 mt-4 max-w-3xl">{hobby.description}</p>
+          ) : null}
+          {!isChess && hobby.tags.length > 0 ? (
             <div className="mt-4 flex flex-wrap gap-2">
               {hobby.tags.map((tag) => (
                 <span key={tag} className="showcase-chip">
@@ -1249,18 +1251,18 @@ export default function HobbyDetail() {
           ) : null}
 
           {isChess ? (
-            <div className="mt-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
               <h2 className="section-title">Dashboards</h2>
               <div />
             </div>
             {lastSyncedAt ? (
-              <p className="text-xs text-white/50 -mt-2 mb-2">
+              <p className="text-xs text-white/50 -mt-1 mb-3">
                 Last synced: {lastSyncedAt}
                 {syncSource ? ` · Source: ${syncSource}` : ""}
               </p>
             ) : null}
-            <p className="text-xs text-white/55 mb-2">
+            <p className="text-xs text-white/55 mb-4">
               Snapshot-first sync with Supabase. On the Hobby plan, dashboard updates are shown once per day.
             </p>
             {pgnLoading ? <p className="text-white/65">Loading PGN data...</p> : null}
