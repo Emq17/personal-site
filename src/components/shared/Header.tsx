@@ -2,20 +2,21 @@ import logo from "../../assets/icons/favicon-32x32.png";
 import { Link, useLocation } from "react-router-dom";
 import { forwardRef, useEffect, useState } from "react";
 
+const sectionLinks = [
+  { label: "Home", href: "/#hero" },
+  { label: "Skills", href: "/#skills" },
+  { label: "Projects", href: "/#projects" },
+  { label: "Experience", href: "/#experience" },
+  { label: "Education", href: "/#education" },
+  { label: "Hobbies", href: "/#hobbies" },
+  { label: "Travel", href: "/#travel" },
+  { label: "Contact", href: "/#contact" },
+];
+
 const Header = forwardRef<HTMLDivElement>((_, ref) => {
   const { hash, pathname } = useLocation();
   const [scrollProgress, setScrollProgress] = useState(0);
   const [activeSection, setActiveSection] = useState(hash || "#hero");
-  const sectionLinks = [
-    { label: "Home", href: "/#hero" },
-    { label: "Skills", href: "/#skills" },
-    { label: "Projects", href: "/#projects" },
-    { label: "Experience", href: "/#experience" },
-    { label: "Education", href: "/#education" },
-    { label: "Hobbies", href: "/#hobbies" },
-    { label: "Travel", href: "/#travel" },
-    { label: "Contact", href: "/#contact" },
-  ];
 
   // Enable mouse wheel to scroll pills horizontally (desktop-friendly)
   useEffect(() => {

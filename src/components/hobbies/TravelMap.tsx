@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Globe from "react-globe.gl";
+import type { GlobeMethods } from "react-globe.gl";
 
 type TravelStop = {
   id: string;
@@ -543,11 +544,11 @@ function getRegion(stop: TravelStop): Exclude<RegionFilter, "All"> {
 }
 
 export default function TravelMap() {
-  const globeRef = useRef<any>(null);
+  const globeRef = useRef<GlobeMethods | undefined>(undefined);
   const globeContainerRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
   const [activeStopId, setActiveStopId] = useState<string | null>(null);
-  const [countryBorders, setCountryBorders] = useState<any[]>([]);
+  const [countryBorders, setCountryBorders] = useState<object[]>([]);
   const [zoomLevel, setZoomLevel] = useState<number>(2.2);
   const [regionFilter, setRegionFilter] = useState<RegionFilter>("All");
   const [globeReady, setGlobeReady] = useState(false);
@@ -650,26 +651,14 @@ export default function TravelMap() {
     const globe = globeRef.current;
     if (!globe) return;
     try {
-      const material = globe.globeMaterial?.();
-      if (material) {
-        material.bumpScale = 0.08;
-        material.shininess = 9;
-        if (material.emissive?.set) {
-          material.emissive.set("#122033");
-          material.emissiveIntensity = 0.1;
-        }
-      }
+      const controls = globe.controls();
+      controls.autoRotate = true;
+      controls.autoRotateSpeed = 0.35;
+      controls.enablePan = false;
+      controls.minDistance = 150;
+      controls.maxDistance = 280;
 
-      const controls = globe.controls?.();
-      if (controls) {
-        controls.autoRotate = true;
-        controls.autoRotateSpeed = 0.35;
-        controls.enablePan = false;
-        controls.minDistance = 150;
-        controls.maxDistance = 280;
-      }
-
-      globe.pointOfView?.(
+      globe.pointOfView(
         {
           lat: initialStop?.lat ?? 20,
           lng: initialStop?.lng ?? 0,

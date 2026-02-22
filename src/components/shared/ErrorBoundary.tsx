@@ -16,8 +16,10 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     return { hasError: true };
   }
 
-  componentDidCatch(_error: Error, _info: ErrorInfo) {
+  componentDidCatch(error: Error, info: ErrorInfo) {
     // Prevent a single widget failure from blanking the whole app.
+    void error;
+    void info;
   }
 
   render() {

@@ -466,6 +466,8 @@ export default function HobbyDetail() {
       }
     };
     void loadSnapshot();
+    // Initial chess data load should run on page entry; manual sync button handles updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isChess]);
 
   const parsedChessGames = useMemo(
