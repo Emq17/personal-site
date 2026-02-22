@@ -40,6 +40,7 @@ type ChessSummary = {
   avgOpponent: number | null;
   ratingSeries: Array<{ label: string; rating: number }>;
   openingRows: Array<{ eco: string; games: number; winRate: number }>;
+  gameResults: Array<"W" | "D" | "L">;
   insights: string[];
 };
 
@@ -48,7 +49,32 @@ type CoachReport = {
   summary: string;
   focus: string;
   checklist: string[];
+  secretInsights: string[];
+  visuals: Array<{ label: string; value: number; hint: string }>;
 };
+
+function HoverHelp({ text }: { text: string }) {
+  return (
+    <span className="relative inline-flex items-center group align-middle">
+      <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-cyan-300/40 bg-cyan-300/10 text-[10px] text-cyan-100">
+        i
+      </span>
+      <span className="pointer-events-none absolute z-20 left-1/2 top-full mt-2 w-56 -translate-x-1/2 rounded-md border border-white/15 bg-[#0b1320] px-2 py-1.5 text-[11px] text-white/80 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+        {text}
+      </span>
+    </span>
+  );
+}
+
+function openingTypeFromEco(eco: string) {
+  const letter = eco.charAt(0).toUpperCase();
+  if (letter === "A") return "Flank / Irregular";
+  if (letter === "B") return "Semi-Open / Indian";
+  if (letter === "C") return "Open Games / French";
+  if (letter === "D") return "Closed / Queen's Pawn";
+  if (letter === "E") return "Indian Defenses";
+  return "Mixed";
+}
 
 function parsePgnHeaders(pgnText: string): ParsedChessGame[] {
   const chunks = pgnText
@@ -147,6 +173,7 @@ function buildChessSummary(games: ParsedChessGame[]): ChessSummary | null {
   let opponentCount = 0;
   const ratingSeries: Array<{ label: string; rating: number }> = [];
   const openings = new Map<string, { games: number; wins: number }>();
+  const gameResults: Array<"W" | "D" | "L"> = [];
 
   const toResult = (g: PlayerChessGame) => {
     if (g.myColor === "White") whiteGames += 1;
@@ -165,12 +192,15 @@ function buildChessSummary(games: ParsedChessGame[]): ChessSummary | null {
 
     if (g.myResult === "win") {
       wins += 1;
+      gameResults.push("W");
       if (g.myColor === "White") whiteWins += 1;
       else blackWins += 1;
     } else if (g.myResult === "draw") {
       draws += 1;
+      gameResults.push("D");
     } else {
       losses += 1;
+      gameResults.push("L");
     }
 
     const row = openings.get(g.eco) ?? { games: 0, wins: 0 };
@@ -244,11 +274,12 @@ function buildChessSummary(games: ParsedChessGame[]): ChessSummary | null {
     avgOpponent,
     ratingSeries,
     openingRows,
+    gameResults,
     insights,
   };
 }
 
-function buildAiCoachReport(games: ParsedChessGame[], sampleSize: 1 | 5): CoachReport | null {
+function buildAiCoachReport(games: ParsedChessGame[], sampleSize: number): CoachReport | null {
   const perspective = buildPlayerPerspective(games);
   if (!perspective || perspective.games.length === 0) return null;
 
@@ -275,15 +306,17 @@ function buildAiCoachReport(games: ParsedChessGame[], sampleSize: 1 | 5): CoachR
       return br - ar;
     })[0];
 
-  const title = `AI Coach: Last ${sampleSize} Game${sampleSize > 1 ? "s" : ""}`;
+  const title = `GM Coach: Last ${sampleSize} Game${sampleSize > 1 ? "s" : ""}`;
 
   let summary = "";
   if (wins === sampleSize) {
-    summary = "Strong run. You are converting advantages well and keeping results consistent.";
+    summary =
+      "You are converting positions well. Now the next jump is squeezing small advantages instead of relying on tactical swings.";
   } else if (losses === sampleSize) {
-    summary = "Tough stretch. The pattern suggests avoidable errors are compounding early.";
+    summary =
+      "This run is recoverable. The losses are not from one huge gap, but from repeated decision-quality leaks in similar phases.";
   } else {
-    summary = `Mixed results (${wins}W-${draws}D-${losses}L). You are close, but a few repeat mistakes are swinging outcomes.`;
+    summary = `Mixed stretch (${wins}W-${draws}D-${losses}L). Your ceiling is clearly higher than your floor; consistency is now the real battleground.`;
   }
 
   const focusParts: string[] = [];
@@ -306,9 +339,66 @@ function buildAiCoachReport(games: ParsedChessGame[], sampleSize: 1 | 5): CoachR
   }
 
   const checklist = [
-    "Before each game: pick one opening plan and one safety rule.",
-    "After each game: review first turning point within 10 minutes.",
-    "Track one recurring mistake and avoid it for your next 10 games.",
+    "Before each game, define your first 12-move structure goal and one tactical blunder-check trigger.",
+    "After each game, annotate the first irreversible mistake and one move before it that allowed it.",
+    "For the next 10 games, play for position first; only calculate forcing lines once king safety is verified.",
+  ];
+
+  const lossByEco = new Map<string, number>();
+  const avgMoveCount =
+    recent.length > 0
+      ? Math.round(recent.reduce((sum, g) => sum + g.moveCount, 0) / recent.length)
+      : 0;
+  recent.forEach((g) => {
+    if (g.myResult === "loss") {
+      lossByEco.set(g.eco, (lossByEco.get(g.eco) ?? 0) + 1);
+    }
+  });
+  const mostPunishedEco = [...lossByEco.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const secretInsights = [
+    mostPunishedEco
+      ? `Secret edge: opponents are scoring against you most often in ${mostPunishedEco}. Prepare two model games and one endgame plan from that structure.`
+      : "Secret edge: your opening spread is healthy; focus on converting equal middlegames, not memorizing more lines.",
+    timeForfeits > 0
+      ? "Secret edge: your clock losses are technique losses in disguise. Use a hard time budget by move 20 and refuse deep side-lines when behind on time."
+      : "Secret edge: your clock control is decent. Convert this into rating by forcing simpler positions when ahead.",
+    avgMoveCount < 28
+      ? "Secret edge: your games are ending too early. Build a 'stability phase' between moves 12-20 to avoid premature collapses."
+      : "Secret edge: your games go long enough; train conversion technique in slightly better endgames to turn draws into wins.",
+  ];
+
+  const toScore = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
+  const conversionScore = toScore((wins / Math.max(sampleSize, 1)) * 100);
+  const clockDisciplineScore = toScore(100 - (timeForfeits / Math.max(sampleSize, 1)) * 100);
+  const openingStabilityScore = toScore(
+    100 -
+      (mostPunishedEco
+        ? ((lossByEco.get(mostPunishedEco) ?? 0) / Math.max(recent.length, 1)) * 100
+        : 0)
+  );
+  const survivalScore = toScore(100 - (shortLosses / Math.max(sampleSize, 1)) * 100);
+
+  const visuals = [
+    {
+      label: "Conversion",
+      value: conversionScore,
+      hint: "How well you convert playable positions into points.",
+    },
+    {
+      label: "Clock Discipline",
+      value: clockDisciplineScore,
+      hint: "Lower time-pressure mistakes and better move pacing.",
+    },
+    {
+      label: "Opening Stability",
+      value: openingStabilityScore,
+      hint: "How consistently your opening phase avoids immediate damage.",
+    },
+    {
+      label: "Early-Game Survival",
+      value: survivalScore,
+      hint: "Resilience through moves 1-25 before complications spike.",
+    },
   ];
 
   return {
@@ -316,6 +406,8 @@ function buildAiCoachReport(games: ParsedChessGame[], sampleSize: 1 | 5): CoachR
     summary,
     focus: focusParts.slice(0, 2).join(" "),
     checklist,
+    secretInsights,
+    visuals,
   };
 }
 
@@ -368,7 +460,7 @@ export default function HobbyDetail() {
   const [lastSyncedAt, setLastSyncedAt] = useState<string>("");
   const [syncSource, setSyncSource] = useState<string>("");
   const [lichessUsername, setLichessUsername] = useState("zaibao1");
-  const [analysisWindow, setAnalysisWindow] = useState<1 | 5>(5);
+  const [analysisWindow, setAnalysisWindow] = useState<number>(5);
   const [coachReport, setCoachReport] = useState<CoachReport | null>(null);
   const isLocalDev =
     typeof window !== "undefined" &&
@@ -649,14 +741,82 @@ export default function HobbyDetail() {
                 </div>
 
                 <div className="showcase-inner-card">
-                  <p className="text-sm uppercase tracking-wider text-white/60 mb-2">Rating Trend</p>
+                  <p className="text-sm uppercase tracking-wider text-white/60 mb-2 inline-flex items-center gap-2">
+                    Rating Trend
+                    <HoverHelp text="Tracks rating trajectory over time. A flat trend with fewer drops is often better than volatile spikes." />
+                  </p>
                   <MiniLineChart values={chessSummary.ratingSeries.map((r) => r.rating)} />
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <article className="showcase-inner-card">
-                    <p className="text-sm uppercase tracking-wider text-white/60 mb-2">
-                      Openings Performance
+                    <p className="text-sm uppercase tracking-wider text-white/60 mb-2 inline-flex items-center gap-2">
+                      Results
+                      <HoverHelp text="Complete game result history. Newest game appears at the top." />
+                    </p>
+                    <div className="max-h-[28rem] overflow-y-auto pr-1 space-y-1.5">
+                      {chessSummary.gameResults.length > 0 ? (
+                        [...chessSummary.gameResults].reverse().map((r, idx) => {
+                          const gameNum = chessSummary.gameResults.length - idx;
+                          return (
+                            <div
+                              key={`${r}-${idx}`}
+                              className="flex items-center justify-between rounded-md border border-white/10 bg-white/5 px-2 py-1"
+                            >
+                              <span className="text-xs text-white/65">Game {gameNum}</span>
+                              <span
+                                className={`inline-flex h-5 min-w-5 px-1 items-center justify-center rounded text-[11px] font-semibold ${
+                              r === "W"
+                                ? "bg-emerald-400/20 text-emerald-100 border border-emerald-300/35"
+                                : r === "D"
+                                  ? "bg-slate-400/20 text-slate-100 border border-slate-300/30"
+                                  : "bg-rose-400/20 text-rose-100 border border-rose-300/35"
+                            }`}
+                              >
+                                {r}
+                              </span>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <p className="text-white/55 text-sm">No recent form data yet.</p>
+                      )}
+                    </div>
+                  </article>
+
+                  <article className="showcase-inner-card">
+                    <p className="text-sm uppercase tracking-wider text-white/60 mb-2 inline-flex items-center gap-2">
+                      Openings Used
+                      <HoverHelp text="Opening families inferred from ECO codes to show what you're using most often." />
+                    </p>
+                    <div className="space-y-2">
+                      {chessSummary.openingRows.length > 0 ? (
+                        chessSummary.openingRows.map((row) => (
+                          <div key={row.eco}>
+                            <div className="flex items-center justify-between text-sm text-white/80">
+                              <span>{openingTypeFromEco(row.eco)} ({row.eco})</span>
+                              <span>{row.games}g · {row.winRate.toFixed(0)}%</span>
+                            </div>
+                            <div className="mt-1 h-2 rounded-full bg-white/10">
+                              <div
+                                className="h-2 rounded-full bg-indigo-300/80"
+                                style={{ width: `${Math.max(4, row.winRate)}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-white/55 text-sm">No opening usage data yet.</p>
+                      )}
+                    </div>
+                  </article>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <article className="showcase-inner-card">
+                    <p className="text-sm uppercase tracking-wider text-white/60 mb-2 inline-flex items-center gap-2">
+                      Opening Win Rate
+                      <HoverHelp text="Win rate by ECO line. Higher sample size gives more reliable signals." />
                     </p>
                     <div className="space-y-2">
                       {chessSummary.openingRows.length > 0 ? (
@@ -694,15 +854,20 @@ export default function HobbyDetail() {
 
                 <article className="showcase-inner-card">
                   <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                    <p className="text-sm uppercase tracking-wider text-white/60">AI Coach</p>
+                    <p className="text-sm uppercase tracking-wider text-white/60 inline-flex items-center gap-2">
+                      AI Coach
+                      <HoverHelp text="Coach output is derived from your recent games and emphasizes recurring patterns, not generic advice." />
+                    </p>
                     <div className="flex items-center gap-2">
                       <select
                         value={analysisWindow}
-                        onChange={(e) => setAnalysisWindow(Number(e.target.value) as 1 | 5)}
+                        onChange={(e) => setAnalysisWindow(Number(e.target.value))}
                         className="rounded-lg border border-white/15 bg-[#0b1320] px-2.5 py-1.5 text-sm text-white/85"
                       >
                         <option value={1}>Last 1 Game</option>
                         <option value={5}>Last 5 Games</option>
+                        <option value={10}>Last 10 Games</option>
+                        <option value={20}>Last 20 Games</option>
                       </select>
                       <button type="button" onClick={runCoachAnalysis} className="showcase-cta-primary">
                         Analyze
@@ -712,13 +877,55 @@ export default function HobbyDetail() {
                   {coachReport ? (
                     <div className="space-y-2.5 text-sm text-white/80">
                       <p className="font-semibold text-cyan-100">{coachReport.title}</p>
-                      <p>{coachReport.summary}</p>
-                      <p>{coachReport.focus}</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2">
+                          <p className="text-[11px] uppercase tracking-wider text-white/55 mb-1">Position</p>
+                          <p>{coachReport.summary}</p>
+                        </div>
+                        <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2">
+                          <p className="text-[11px] uppercase tracking-wider text-white/55 mb-1">Primary Focus</p>
+                          <p>{coachReport.focus}</p>
+                        </div>
+                      </div>
                       <ul className="list-disc list-inside space-y-1 text-white/72">
                         {coachReport.checklist.map((item) => (
                           <li key={item}>{item}</li>
                         ))}
                       </ul>
+                      <div className="mt-2 pt-2 border-t border-white/10">
+                        <p className="text-[11px] uppercase tracking-wider text-cyan-100/70 mb-2">
+                          Coach Signal Board
+                        </p>
+                        <div className="space-y-2">
+                          {coachReport.visuals.map((signal) => (
+                            <div key={signal.label}>
+                              <div className="flex items-center justify-between text-xs text-white/75">
+                                <span className="inline-flex items-center gap-1.5">
+                                  {signal.label}
+                                  <HoverHelp text={signal.hint} />
+                                </span>
+                                <span>{signal.value}%</span>
+                              </div>
+                              <div className="mt-1 h-2 rounded-full bg-white/10">
+                                <div
+                                  className="h-2 rounded-full bg-cyan-300/75"
+                                  style={{ width: `${Math.max(4, signal.value)}%` }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="mt-2 pt-2 border-t border-white/10">
+                        <p className="text-[11px] uppercase tracking-wider text-cyan-100/70 mb-1">
+                          Secret Insights
+                        </p>
+                        <ul className="list-disc list-inside space-y-1 text-white/75">
+                          {coachReport.secretInsights.map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
                   ) : (
                     <p className="text-sm text-white/60">
