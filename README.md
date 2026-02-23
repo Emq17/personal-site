@@ -36,8 +36,16 @@ Most personal sites are either resume-only or personality-only. I built this one
 - **Contact**: direct links for outreach
 
 ### Chess Dashboard (Hobby Detail)
-- Source switcher at the top of chess detail: **Lichess** or **Chess.com**
+- Source switcher at the top of chess detail: **All**, **Lichess**, or **Chess.com**
+- **All** combines both connected usernames into one merged view
 - Same dashboard layout for both sources
+- New app-style **Performance Overview** block:
+  - Time windows: `7 days`, `30 days`, `90 days`, `1 year`, `All Time`
+  - Color filters: `All Games`, `White`, `Black`
+  - Segmented W/L/D performance bar with counts + percentages
+  - Average opponent rating with split by wins/losses/draws
+  - Best win and best streak highlight cards
+  - Latest-first completed games list
 - Signal quality modes:
   - **Single Game** selector (defaults to most recent game)
   - **Totals** window selector for aggregate review

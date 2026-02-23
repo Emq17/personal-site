@@ -1,10 +1,15 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { FaEnvelope, FaGithub, FaLinkedin } from "react-icons/fa";
 import { Link } from "react-router-dom";
 import profilePic from "../assets/profile.jpg";
 import { skillsets } from "../components/work-page/content/SkillsData";
 import { experiences } from "../components/work-page/content/ExperiencesData";
-import { certifications, education } from "../components/work-page/content/EducationData";
+import {
+  certifications,
+  certificationTraining,
+  education,
+} from "../components/work-page/content/EducationData";
 import ErrorBoundary from "../components/shared/ErrorBoundary";
 import TravelMap from "../components/hobbies/TravelMap";
 import { hobbies } from "../components/hobbies/content/HobbiesData";
@@ -28,6 +33,11 @@ export default function Showcase() {
   const visibleExperiences = experiences.filter(
     (exp) => !hiddenExperienceCompanies.has(exp.companyName)
   );
+  const bsProgram = education.find((item) => item.program === "Computer Science - B.S.");
+  const bsProofGallery =
+    bsProgram && "proofGallery" in bsProgram && Array.isArray(bsProgram.proofGallery)
+      ? bsProgram.proofGallery
+      : [];
 
   const projectVisuals = [
     {
@@ -222,6 +232,18 @@ export default function Showcase() {
           </div>
         </section>
 
+        <section id="languages" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28 text-center md:text-left">
+          <p className="section-kicker">Communication</p>
+          <h2 className="section-title">Languages</h2>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {["English", "Tagalog", "Spanish", "Japanese", "Korean"].map((language) => (
+              <span key={language} className="showcase-chip">
+                {language}
+              </span>
+            ))}
+          </div>
+        </section>
+
         <section id="experience" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28 text-center md:text-left">
           <p className="section-kicker">Career</p>
           <h2 className="section-title">Experience</h2>
@@ -261,47 +283,63 @@ export default function Showcase() {
                 key={`${item.institution}-${item.program}`}
                 className="showcase-inner-card relative"
               >
-                <p className="text-white/95 font-semibold">{item.program}</p>
+                <p className="text-white/95 font-semibold whitespace-pre-line">{item.program}</p>
                 <p className="text-white/65 mt-1">{item.institution}</p>
                 <div className="mt-3 flex gap-2 flex-wrap">
                   <span className="showcase-chip">{item.status}</span>
                   {item.timeframe ? <span className="showcase-chip">{item.timeframe}</span> : null}
                 </div>
-                <p className="text-sm text-white/50 mt-3">{item.location}</p>
-                {"proofImage" in item && item.proofImage ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setExpandedProof({
-                        src: resolvePublicAsset(item.proofImage),
-                        label:
-                          "proofLabel" in item && item.proofLabel ? item.proofLabel : "View proof",
-                      })
-                    }
-                    className="absolute bottom-3 right-3 overflow-hidden rounded-md border border-cyan-300/40 bg-[#0b1320] hover:border-cyan-300/65 transition shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
-                    aria-label={
-                      "proofLabel" in item && item.proofLabel ? item.proofLabel : "View proof"
-                    }
-                  >
-                    <img
-                      src={resolvePublicAsset(item.proofImage)}
-                      alt={`${item.program} progress preview`}
-                      loading="lazy"
-                      className="h-10 w-14 object-cover"
-                    />
-                  </button>
+                {"skills" in item && Array.isArray(item.skills) && item.skills.length > 0 ? (
+                  <div className="mt-3">
+                    <ul className="text-sm text-white/80 space-y-1 list-disc list-inside">
+                      {item.skills.map((skill: string) => (
+                        <li key={`${item.program}-skill-${skill}`}>{skill}</li>
+                      ))}
+                    </ul>
+                  </div>
                 ) : null}
+                <p className="text-sm text-white/50 mt-3">{item.location}</p>
               </article>
             ))}
+            <article className="showcase-inner-card">
+              <p className="text-white/95 font-semibold">Progress Snapshots</p>
+              {bsProofGallery.length > 0 ? (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {bsProofGallery.map((proofSrc: string, idx: number) => (
+                    <button
+                      key={`bs-proof-${proofSrc}-${idx}`}
+                      type="button"
+                      onClick={() =>
+                        setExpandedProof({
+                          src: resolvePublicAsset(proofSrc),
+                          label: idx === 0 ? "Remaining classes snapshot" : "Full course load snapshot",
+                        })
+                      }
+                      className="overflow-hidden rounded-md border border-cyan-300/40 bg-[#0b1320] hover:border-cyan-300/65 transition shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
+                      aria-label={idx === 0 ? "Open remaining classes snapshot" : "Open full course load snapshot"}
+                    >
+                      <img
+                        src={resolvePublicAsset(proofSrc)}
+                        alt={idx === 0 ? "Remaining classes snapshot" : "Full course load snapshot"}
+                        loading="lazy"
+                        className="h-24 w-full object-cover"
+                      />
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-white/60 mt-3">Add proof images to show coursework progress snapshots.</p>
+              )}
+            </article>
           </div>
           <div className="showcase-inner-card mt-4">
-            <p className="font-semibold">Certifications</p>
-            <div className="flex flex-wrap gap-2 mt-3">
-              {certifications.map((cert) => (
-                <span key={`${cert.provider}-${cert.name}`} className="showcase-chip">
-                  {cert.name}
-                </span>
-              ))}
+            <p className="font-semibold">Certifications / Additional Training</p>
+            <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
+              <ul className="text-sm text-white/80 space-y-1 list-disc list-inside">
+                {[...certificationTraining, ...certifications.map((cert) => cert.name)].map((item) => (
+                  <li key={`training-${item}`}>{item}</li>
+                ))}
+              </ul>
             </div>
           </div>
         </section>
@@ -325,8 +363,10 @@ export default function Showcase() {
                     </span>
                   ))}
                 </div>
-                <p className="text-cyan-200/80 text-xs uppercase tracking-wider mt-4">
-                  Open details
+                <p className="text-cyan-200/80 text-xs tracking-wide mt-4">
+                  {hobby.slug === "chess"
+                    ? "View my dashboards"
+                    : "Open details"}
                 </p>
               </Link>
             ))}
@@ -376,40 +416,87 @@ export default function Showcase() {
             </a>
           </div>
         </section>
+
+        <section id="how-built" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28 text-center md:text-left">
+          <p className="section-kicker">Build Notes</p>
+          <h2 className="section-title">How This Site Was Built</h2>
+          <p className="text-white/70 max-w-4xl">
+            This is a single-page portfolio built to be easy to scan, easy to maintain, and flexible to
+            grow over time with new projects, experience, and hobby dashboards.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
+            <article className="showcase-inner-card">
+              <p className="text-white/95 font-semibold">Project Objective</p>
+              <ul className="mt-2 text-sm text-white/75 list-disc list-inside space-y-1">
+                <li>Combine work and personal sections in one cohesive flow.</li>
+                <li>Keep content clear enough for quick review and deep enough for technical evaluation.</li>
+                <li>Use a structure that can be updated continuously.</li>
+              </ul>
+            </article>
+            <article className="showcase-inner-card">
+              <p className="text-white/95 font-semibold">Technical Stack</p>
+              <ul className="mt-2 text-sm text-white/75 list-disc list-inside space-y-1">
+                <li>Frontend: React + TypeScript</li>
+                <li>Build tooling: Vite</li>
+                <li>Routing: React Router</li>
+                <li>Styling: Tailwind CSS + DaisyUI</li>
+              </ul>
+            </article>
+            <article className="showcase-inner-card">
+              <p className="text-white/95 font-semibold">Architecture</p>
+              <ul className="mt-2 text-sm text-white/75 list-disc list-inside space-y-1">
+                <li>Main route: section-based showcase page.</li>
+                <li>Dynamic route for each hobby detail page.</li>
+                <li>Legacy paths redirect to section anchors.</li>
+              </ul>
+            </article>
+            <article className="showcase-inner-card">
+              <p className="text-white/95 font-semibold">UX Decisions</p>
+              <ul className="mt-2 text-sm text-white/75 list-disc list-inside space-y-1">
+                <li>Header pill navigation with active-section highlighting.</li>
+                <li>Responsive layouts tuned for desktop and mobile.</li>
+                <li>Interactive visuals for projects, travel, and chess analytics.</li>
+              </ul>
+            </article>
+          </div>
+        </section>
       </div>
 
-      {expandedProof ? (
-        <div
-          className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setExpandedProof(null)}
-        >
-          <div
-            className="relative w-full max-w-3xl rounded-xl border border-white/20 bg-[#0b1320] p-3"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
+      {expandedProof && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
               onClick={() => setExpandedProof(null)}
-              className="absolute right-2 top-2 h-8 w-8 rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20 transition"
-              aria-label="Close proof preview"
             >
-              ×
-            </button>
-            <p className="text-sm text-cyan-100/85 mb-2 pr-10">{expandedProof.label}</p>
-            <img
-              src={expandedProof.src}
-              alt={expandedProof.label}
-              onError={(e) => {
-                const fallback = resolvePublicAsset("/projects/remaining-classes.png");
-                if (e.currentTarget.src !== fallback) {
-                  e.currentTarget.src = fallback;
-                }
-              }}
-              className="w-full max-h-[75vh] object-contain rounded-lg bg-[#050b16]"
-            />
-          </div>
-        </div>
-      ) : null}
+              <div
+                className="relative w-full max-w-3xl rounded-xl border border-white/20 bg-[#0b1320] p-3"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  onClick={() => setExpandedProof(null)}
+                  className="absolute right-2 top-2 h-8 w-8 rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20 transition"
+                  aria-label="Close proof preview"
+                >
+                  ×
+                </button>
+                <p className="text-sm text-cyan-100/85 mb-2 pr-10">{expandedProof.label}</p>
+                <img
+                  src={expandedProof.src}
+                  alt={expandedProof.label}
+                  onError={(e) => {
+                    const fallback = resolvePublicAsset("/projects/remaining-classes.png");
+                    if (e.currentTarget.src !== fallback) {
+                      e.currentTarget.src = fallback;
+                    }
+                  }}
+                  className="w-full max-h-[75vh] object-contain rounded-lg bg-[#050b16]"
+                />
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   );
 }

@@ -38,10 +38,12 @@ type ParsedChessGame = {
 
 type PlayerChessGame = {
   date: Date | null;
+  myAccount: string;
   myColor: "White" | "Black";
-  myResult: "win" | "draw" | "loss";
+  myResult: "win" | "draw" | "loss" | "unknown";
   myRating: number | null;
   oppRating: number | null;
+  oppName: string;
   eco: string;
   timeControl: string;
   termination: string;
@@ -56,6 +58,25 @@ type PlayerChessGame = {
   annotationBrilliants: number;
   annotationMissedWins: number;
   signalSource: SignalQualitySource;
+};
+type OverviewGameRow = PlayerChessGame & { gameNumber: number };
+type OverviewStats = {
+  totalGames: number;
+  scoredCount: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  winPct: number;
+  drawPct: number;
+  lossPct: number;
+  scorePct: number;
+  avgOpp: number | null;
+  avgOppWin: number | null;
+  avgOppLoss: number | null;
+  avgOppDraw: number | null;
+  bestWin: OverviewGameRow | null;
+  bestStreak: number;
+  bestStreakEnd: OverviewGameRow | null;
 };
 
 type SignalQualitySource = "exact" | "estimated" | "none";
@@ -81,6 +102,7 @@ type ChessSummary = {
   wins: number;
   draws: number;
   losses: number;
+  overallScoreRate: number;
   whiteGames: number;
   blackGames: number;
   whiteWinRate: number;
@@ -110,6 +132,8 @@ type ChessSummary = {
   avgMovesInLosses: number | null;
   timeForfeits: number;
   timeForfeitRate: number;
+  myTimeForfeits: number;
+  opponentTimeForfeits: number;
   insights: string[];
 };
 
@@ -123,17 +147,87 @@ type CoachReport = {
   visuals: Array<{ label: string; value: number; hint: string }>;
 };
 
-type ChessPlatform = "lichess" | "chesscom";
+type ChessSourcePlatform = "lichess" | "chesscom";
+type ChessPlatform = ChessSourcePlatform | "all";
+type OverviewWindow = "7d" | "30d" | "90d" | "1y" | "all";
+type OverviewColorFilter = "all" | "white" | "black";
+type MusicDiscipline = "drums" | "guitar" | "bass" | "vocals" | "produced";
 
 const WINDOW_OPTIONS = [1, 2, 3, 4, 5, 10, 20, 30, 50];
-const CHESS_USERS: Record<ChessPlatform, string> = {
+const CHESS_USERS: Record<ChessSourcePlatform, string> = {
   lichess: "zaibao1",
-  chesscom: "zaibao1",
+  chesscom: "zaibao2",
 };
 const CHESS_PLATFORM_LABEL: Record<ChessPlatform, string> = {
+  all: "All Accounts",
   lichess: "Lichess",
   chesscom: "Chess.com",
 };
+const CHESS_SOURCE_PLATFORMS: ChessSourcePlatform[] = ["lichess", "chesscom"];
+const OVERVIEW_WINDOWS: Array<{ value: OverviewWindow; label: string; days: number | null }> = [
+  { value: "7d", label: "7 days", days: 7 },
+  { value: "30d", label: "30 days", days: 30 },
+  { value: "90d", label: "90 days", days: 90 },
+  { value: "1y", label: "1 year", days: 365 },
+  { value: "all", label: "All Time", days: null },
+];
+const MUSIC_DISCIPLINE_VIEWS: Array<{
+  key: MusicDiscipline;
+  label: string;
+  subtitle: string;
+  bullets: string[];
+}> = [
+  {
+    key: "drums",
+    label: "Drums",
+    subtitle: "Rhythm and timing foundation.",
+    bullets: [
+      "Practice focus: pocket, groove consistency, and dynamic control.",
+      "Current priority: cleaner fills that resolve back into time.",
+      "Improvement lens: precision under tempo changes.",
+    ],
+  },
+  {
+    key: "guitar",
+    label: "Guitar",
+    subtitle: "Harmony and melodic phrasing.",
+    bullets: [
+      "Practice focus: chord transitions, voicings, and clean articulation.",
+      "Current priority: phrasing with stronger timing discipline.",
+      "Improvement lens: cleaner tone with fewer wasted movements.",
+    ],
+  },
+  {
+    key: "bass",
+    label: "Bass",
+    subtitle: "Low-end control and groove locking.",
+    bullets: [
+      "Practice focus: locking with kick patterns and note duration.",
+      "Current priority: tighter finger economy and consistency.",
+      "Improvement lens: supportive lines that improve song feel.",
+    ],
+  },
+  {
+    key: "vocals",
+    label: "Vocals",
+    subtitle: "Pitch, breath, and delivery.",
+    bullets: [
+      "Practice focus: breath support and pitch stability.",
+      "Current priority: cleaner transitions between registers.",
+      "Improvement lens: clarity and control over longer phrases.",
+    ],
+  },
+  {
+    key: "produced",
+    label: "Produced",
+    subtitle: "Songs produced and arranged.",
+    bullets: [
+      "Focus: songwriting structure, arrangement, and mix decisions.",
+      "Current priority: tighter intros/transitions and vocal placement.",
+      "Improvement lens: faster iteration from demo to finished track.",
+    ],
+  },
+];
 
 const EMPTY_MOVE_SIGNAL_COUNTS: MoveSignalCounts = {
   brilliants: 0,
@@ -226,6 +320,22 @@ function parseTimeControlBaseMinutes(timeControl: string) {
   const base = Number.parseInt(String(timeControl ?? "").split("+")[0] ?? "", 10);
   if (!Number.isFinite(base) || base <= 0) return null;
   return base / 60;
+}
+
+function formatShortDate(date: Date | null) {
+  if (!date) return "Unknown";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function percentOf(value: number, total: number) {
+  if (total <= 0) return 0;
+  return (value / total) * 100;
+}
+
+function accountToPlatformLabel(account: string) {
+  const source = CHESS_SOURCE_PLATFORMS.find((platform) => CHESS_USERS[platform] === account);
+  if (!source) return account;
+  return CHESS_PLATFORM_LABEL[source];
 }
 
 async function fetchChessComPgnDirect(username: string, maxGames = 220) {
@@ -512,19 +622,29 @@ function parsePgnHeaders(pgnText: string): ParsedChessGame[] {
   });
 }
 
-function buildPlayerPerspective(games: ParsedChessGame[]) {
+function buildPlayerPerspective(games: ParsedChessGame[], preferredPlayers?: string[]) {
   if (games.length === 0) return null;
 
-  const counts = new Map<string, number>();
-  games.forEach((g) => {
-    if (g.white) counts.set(g.white, (counts.get(g.white) ?? 0) + 1);
-    if (g.black) counts.set(g.black, (counts.get(g.black) ?? 0) + 1);
-  });
-  const player = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-  if (!player) return null;
+  const preferred = (preferredPlayers ?? []).filter(Boolean);
+  const preferredSet = new Set(preferred);
+  const hasPreferred = preferredSet.size > 0;
+
+  let player = "";
+  if (hasPreferred) {
+    player = preferred.length > 1 ? "Combined" : preferred[0];
+  } else {
+    const counts = new Map<string, number>();
+    games.forEach((g) => {
+      if (g.white) counts.set(g.white, (counts.get(g.white) ?? 0) + 1);
+      if (g.black) counts.set(g.black, (counts.get(g.black) ?? 0) + 1);
+    });
+    player = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+    if (!player) return null;
+    preferredSet.add(player);
+  }
 
   const scoped = games
-    .filter((g) => g.white === player || g.black === player)
+    .filter((g) => preferredSet.has(g.white) || preferredSet.has(g.black))
     .sort((a, b) => {
       const ta = a.date ? a.date.getTime() : 0;
       const tb = b.date ? b.date.getTime() : 0;
@@ -532,20 +652,26 @@ function buildPlayerPerspective(games: ParsedChessGame[]) {
     });
 
   const myGames: PlayerChessGame[] = scoped.map((g) => {
-    const isWhite = g.white === player;
-    const myResult: "win" | "draw" | "loss" =
+    const whiteMine = preferredSet.has(g.white);
+    const blackMine = preferredSet.has(g.black);
+    const isWhite = whiteMine || !blackMine;
+    const myResult: "win" | "draw" | "loss" | "unknown" =
       g.result === "1/2-1/2"
         ? "draw"
         : (isWhite && g.result === "1-0") || (!isWhite && g.result === "0-1")
           ? "win"
-          : "loss";
+          : (isWhite && g.result === "0-1") || (!isWhite && g.result === "1-0")
+            ? "loss"
+            : "unknown";
 
     return {
       date: g.date,
+      myAccount: isWhite ? g.white : g.black,
       myColor: isWhite ? "White" : "Black",
       myResult,
       myRating: isWhite ? g.whiteElo : g.blackElo,
       oppRating: isWhite ? g.blackElo : g.whiteElo,
+      oppName: isWhite ? g.black : g.white,
       eco: g.eco,
       timeControl: g.timeControl,
       termination: g.termination,
@@ -571,8 +697,8 @@ function buildPlayerPerspective(games: ParsedChessGame[]) {
   return { player, games: myGames };
 }
 
-function buildChessSummary(games: ParsedChessGame[]): ChessSummary | null {
-  const perspective = buildPlayerPerspective(games);
+function buildChessSummary(games: ParsedChessGame[], preferredPlayers?: string[]): ChessSummary | null {
+  const perspective = buildPlayerPerspective(games, preferredPlayers);
   if (!perspective) return null;
   const { player } = perspective;
   const scoped = perspective.games;
@@ -580,6 +706,7 @@ function buildChessSummary(games: ParsedChessGame[]): ChessSummary | null {
   let wins = 0;
   let draws = 0;
   let losses = 0;
+  let scoredGames = 0;
   let whiteGames = 0;
   let blackGames = 0;
   let whiteWins = 0;
@@ -613,6 +740,8 @@ function buildChessSummary(games: ParsedChessGame[]): ChessSummary | null {
   let winBaseMinutesGames = 0;
   let lossBaseMinutesGames = 0;
   let timeForfeits = 0;
+  let myTimeForfeits = 0;
+  let opponentTimeForfeits = 0;
   const signalRows: SignalRowWithSource[] = [];
 
   const toResult = (g: PlayerChessGame) => {
@@ -632,14 +761,17 @@ function buildChessSummary(games: ParsedChessGame[]): ChessSummary | null {
 
     if (g.myResult === "win") {
       wins += 1;
+      scoredGames += 1;
       gameResults.push("W");
       if (g.myColor === "White") whiteWins += 1;
       else blackWins += 1;
     } else if (g.myResult === "draw") {
       draws += 1;
+      scoredGames += 1;
       gameResults.push("D");
-    } else {
+    } else if (g.myResult === "loss") {
       losses += 1;
+      scoredGames += 1;
       gameResults.push("L");
     }
 
@@ -686,7 +818,11 @@ function buildChessSummary(games: ParsedChessGame[]): ChessSummary | null {
         lossBaseMinutesGames += 1;
       }
     }
-    if (/time forfeit/i.test(g.termination)) timeForfeits += 1;
+    if (/time forfeit/i.test(g.termination)) {
+      timeForfeits += 1;
+      if (g.myResult === "loss") myTimeForfeits += 1;
+      if (g.myResult === "win") opponentTimeForfeits += 1;
+    }
     signalRows.push({
       gameNumber: signalRows.length + 1,
       game: g.date ? g.date.toISOString().slice(0, 10) : `Game ${signalRows.length + 1}`,
@@ -779,6 +915,7 @@ function buildChessSummary(games: ParsedChessGame[]): ChessSummary | null {
     wins,
     draws,
     losses,
+    overallScoreRate: scoredGames > 0 ? ((wins + draws * 0.5) / scoredGames) * 100 : 0,
     whiteGames,
     blackGames,
     whiteWinRate,
@@ -808,6 +945,8 @@ function buildChessSummary(games: ParsedChessGame[]): ChessSummary | null {
     avgMovesInLosses,
     timeForfeits,
     timeForfeitRate,
+    myTimeForfeits,
+    opponentTimeForfeits,
     insights,
   };
 }
@@ -986,9 +1125,6 @@ function MiniLineChart({ series }: { series: Array<{ label: string; rating: numb
   return (
     <div className="rounded-lg border border-white/10 bg-[#0b1320] p-2">
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-56">
-        <text x="10" y="18" fill="rgba(203,213,225,0.75)" fontSize="10">
-          Rating
-        </text>
         {Array.from({ length: horizontalGrid + 1 }).map((_, i) => {
           const y = pad + (i * plotH) / horizontalGrid;
           return (
@@ -1075,6 +1211,117 @@ function MiniLineChart({ series }: { series: Array<{ label: string; rating: numb
           fontSize="10"
           textAnchor="middle"
         >
+          Date
+        </text>
+      </svg>
+    </div>
+  );
+}
+
+function MyMovesTrendChart({ rows }: { rows: Array<{ game: string; myMoves: number }> }) {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
+  if (rows.length < 2) {
+    return <p className="text-sm text-white/55">Not enough games yet for a moves trend line.</p>;
+  }
+
+  const width = 860;
+  const height = 260;
+  const pad = 16;
+  const leftAxisPad = 54;
+  const bottomAxisPad = 34;
+  const plotW = width - leftAxisPad - pad;
+  const plotH = height - bottomAxisPad - pad;
+  const values = rows.map((r) => r.myMoves);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(max - min, 1);
+  const stepX = plotW / (rows.length - 1);
+  const points = rows.map((r, i) => ({
+    x: leftAxisPad + i * stepX,
+    y: plotH + pad - ((r.myMoves - min) / range) * plotH,
+    game: r.game,
+    myMoves: r.myMoves,
+  }));
+  const polylinePoints = points.map((p) => `${p.x},${p.y}`).join(" ");
+  const yTicks = Array.from({ length: 5 }).map((_, i) => {
+    const t = i / 4;
+    return Math.round(max - t * (max - min));
+  });
+  const hoveredPoint = hoveredIndex != null ? points[hoveredIndex] : null;
+  const startLabel = rows[0]?.game ?? "";
+  const midLabel = rows[Math.floor(rows.length / 2)]?.game ?? "";
+  const endLabel = rows[rows.length - 1]?.game ?? "";
+
+  return (
+    <div className="relative rounded-lg border border-white/10 bg-[#0b1320] p-2">
+      {hoveredPoint ? (
+        <div
+          className="pointer-events-none absolute z-20 rounded border border-cyan-300/45 bg-[#0b1320]/95 px-2 py-1 text-xs text-cyan-100 shadow-lg"
+          style={{
+            left: `calc(${((hoveredPoint.x + 8) / width) * 100}% + 0.25rem)`,
+            top: `calc(${((hoveredPoint.y - 28) / height) * 100}% + 0.25rem)`,
+          }}
+        >
+          <p>{hoveredPoint.game}</p>
+          <p>{hoveredPoint.myMoves} moves</p>
+        </div>
+      ) : null}
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-64">
+        {Array.from({ length: 5 }).map((_, i) => {
+          const y = pad + (i * plotH) / 4;
+          return (
+            <line
+              key={`mv-h-${i}`}
+              x1={leftAxisPad}
+              y1={y}
+              x2={leftAxisPad + plotW}
+              y2={y}
+              stroke="rgba(148,163,184,0.16)"
+              strokeWidth="1"
+            />
+          );
+        })}
+        {yTicks.map((tick, i) => {
+          const y = pad + (i * plotH) / 4 + 3;
+          return (
+            <text key={`mv-yt-${tick}-${i}`} x="12" y={y} fill="rgba(203,213,225,0.72)" fontSize="10">
+              {tick}
+            </text>
+          );
+        })}
+        <polyline fill="none" stroke="rgba(34,211,238,0.95)" strokeWidth="2.4" points={polylinePoints} />
+        {points.map((point, i) => (
+          <circle
+            key={`mv-pt-${point.game}-${i}`}
+            cx={point.x}
+            cy={point.y}
+            r={hoveredIndex === i ? 4.5 : 3.25}
+            fill="rgba(34,211,238,0.95)"
+            onMouseEnter={() => setHoveredIndex(i)}
+            onMouseLeave={() => setHoveredIndex((current) => (current === i ? null : current))}
+          >
+            <title>{`${point.game} · ${point.myMoves} moves`}</title>
+          </circle>
+        ))}
+        <line
+          x1={leftAxisPad}
+          y1={plotH + pad}
+          x2={leftAxisPad + plotW}
+          y2={plotH + pad}
+          stroke="rgba(148,163,184,0.35)"
+          strokeWidth="1"
+        />
+        <text x={leftAxisPad} y={height - 8} fill="rgba(203,213,225,0.72)" fontSize="10">
+          {startLabel}
+        </text>
+        <text x={leftAxisPad + plotW / 2} y={height - 8} fill="rgba(203,213,225,0.72)" fontSize="10" textAnchor="middle">
+          {midLabel}
+        </text>
+        <text x={leftAxisPad + plotW} y={height - 8} fill="rgba(203,213,225,0.72)" fontSize="10" textAnchor="end">
+          {endLabel}
+        </text>
+        <text x={leftAxisPad + plotW / 2} y={height - 20} fill="rgba(203,213,225,0.72)" fontSize="10" textAnchor="middle">
           Date
         </text>
       </svg>
@@ -1274,6 +1521,7 @@ export default function HobbyDetail() {
   const { slug } = useParams();
   const hobby = slug ? hobbyBySlug.get(slug) : undefined;
   const isChess = hobby?.slug === "chess";
+  const isMusic = hobby?.slug === "music";
   const [pgnText, setPgnText] = useState("");
   const [pgnLoading, setPgnLoading] = useState(false);
   const [pgnError, setPgnError] = useState("");
@@ -1285,10 +1533,21 @@ export default function HobbyDetail() {
   const [signalsWindow, setSignalsWindow] = useState<number>(1);
   const [signalsViewMode, setSignalsViewMode] = useState<"window" | "game">("game");
   const [selectedSignalGame, setSelectedSignalGame] = useState<number>(-1);
+  const [selectedMovesGame, setSelectedMovesGame] = useState<number>(-1);
+  const [musicDiscipline, setMusicDiscipline] = useState<MusicDiscipline>("drums");
   const [chessPlatform, setChessPlatform] = useState<ChessPlatform>("lichess");
   const [coachReport, setCoachReport] = useState<CoachReport | null>(null);
   const [ratingWindow, setRatingWindow] = useState<number>(60);
-  const platformUsername = CHESS_USERS[chessPlatform];
+  const [overviewWindow, setOverviewWindow] = useState<OverviewWindow>("all");
+  const [overviewColorFilter, setOverviewColorFilter] = useState<OverviewColorFilter>("all");
+  const selectedPlatforms = useMemo<ChessSourcePlatform[]>(
+    () => (chessPlatform === "all" ? CHESS_SOURCE_PLATFORMS : [chessPlatform]),
+    [chessPlatform]
+  );
+  const selectedPlayers = useMemo(
+    () => selectedPlatforms.map((platform) => CHESS_USERS[platform]),
+    [selectedPlatforms]
+  );
   const isLocalDev =
     typeof window !== "undefined" &&
     (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
@@ -1301,6 +1560,21 @@ export default function HobbyDetail() {
         : "idle";
 
   const isValidPgn = (text: string) => /\[Event\s+"/.test(text);
+  const mergeValidPgn = (chunks: string[]) =>
+    chunks.map((chunk) => chunk.trim()).filter((chunk) => chunk && isValidPgn(chunk)).join("\n\n");
+
+  const fetchDirectPgnForPlatform = async (platform: ChessSourcePlatform, max = 220) => {
+    const username = CHESS_USERS[platform];
+    if (platform === "chesscom") return fetchChessComPgnDirect(username, max);
+    const directLichessUrl = `https://lichess.org/api/games/user/${encodeURIComponent(
+      username
+    )}?max=${max}&opening=true&moves=true&evals=true&analysed=true&pgnInJson=false&format=pgn`;
+    const directRes = await fetch(directLichessUrl, {
+      headers: { Accept: "application/x-chess-pgn,text/plain;q=0.9,*/*;q=0.8" },
+    });
+    if (!directRes.ok) throw new Error(platform);
+    return directRes.text();
+  };
 
   const syncChessData = async () => {
     if (!isChess) return;
@@ -1308,64 +1582,63 @@ export default function HobbyDetail() {
     setPgnError("");
     setCoachReport(null);
 
-    const username = platformUsername;
-    const snapshotUrl = `/api/chess-sync?platform=${chessPlatform}&username=${encodeURIComponent(username)}&max=220`;
-    const directLichessUrl = `https://lichess.org/api/games/user/${encodeURIComponent(
-      username
-    )}?max=220&opening=true&moves=true&evals=true&analysed=true&pgnInJson=false&format=pgn`;
-
     try {
       if (isLocalDev) {
-        const directText =
-          chessPlatform === "lichess"
-            ? await (async () => {
-                const directRes = await fetch(directLichessUrl, {
-                  headers: { Accept: "application/x-chess-pgn,text/plain;q=0.9,*/*;q=0.8" },
-                });
-                if (!directRes.ok) throw new Error("lichess");
-                return directRes.text();
-              })()
-            : await fetchChessComPgnDirect(username, 220);
+        const chunks = await Promise.all(
+          selectedPlatforms.map((platform) => fetchDirectPgnForPlatform(platform, 220))
+        );
+        const directText = mergeValidPgn(chunks);
         if (!directText.trim() || !isValidPgn(directText)) {
-          setPgnError(`Live sync failed in local dev. No valid ${CHESS_PLATFORM_LABEL[chessPlatform]} PGN returned.`);
+          setPgnError(
+            `Live sync failed in local dev. No valid ${CHESS_PLATFORM_LABEL[chessPlatform]} PGN returned.`
+          );
           setPgnText("");
           setPgnLoading(false);
           return;
         }
         setPgnText(directText);
         setLastSyncedAt(new Date().toLocaleTimeString());
-        setSyncSource(`Direct ${CHESS_PLATFORM_LABEL[chessPlatform]} (${username})`);
+        setSyncSource(
+          chessPlatform === "all"
+            ? `Direct Combined (${selectedPlayers.join(" + ")})`
+            : `Direct ${CHESS_PLATFORM_LABEL[chessPlatform]} (${selectedPlayers[0]})`
+        );
         setPgnLoading(false);
         return;
       }
 
-      // Preferred path: sync to Supabase snapshot via API route.
-      const snapshotRes = await fetch(snapshotUrl, { headers: { Accept: "application/json" } });
-      if (snapshotRes.ok) {
-        const data = await snapshotRes.json();
-        if (data?.pgn && isValidPgn(data.pgn)) {
-          setPgnText(data.pgn);
-          setLastSyncedAt(
-            data.syncedAt
-              ? new Date(data.syncedAt).toLocaleTimeString()
-              : new Date().toLocaleTimeString()
-          );
-          setSyncSource(`Supabase snapshot (${CHESS_PLATFORM_LABEL[chessPlatform]} · ${username})`);
-          setPgnLoading(false);
-          return;
-        }
+      const snapshotResults = await Promise.all(
+        selectedPlatforms.map(async (platform) => {
+          const username = CHESS_USERS[platform];
+          const snapshotUrl = `/api/chess-sync?platform=${platform}&username=${encodeURIComponent(username)}&max=220`;
+          const snapshotRes = await fetch(snapshotUrl, { headers: { Accept: "application/json" } });
+          if (!snapshotRes.ok) return null;
+          const data = await snapshotRes.json();
+          if (!data?.pgn || !isValidPgn(data.pgn)) return null;
+          return { pgn: data.pgn as string, syncedAt: data.syncedAt as string | undefined };
+        })
+      );
+      const snapshotText = mergeValidPgn(snapshotResults.map((entry) => entry?.pgn ?? ""));
+      if (snapshotText) {
+        const syncedAtValues = snapshotResults
+          .map((entry) => (entry?.syncedAt ? new Date(entry.syncedAt).getTime() : 0))
+          .filter((t) => t > 0);
+        const latestSynced = syncedAtValues.length > 0 ? new Date(Math.max(...syncedAtValues)) : new Date();
+        setPgnText(snapshotText);
+        setLastSyncedAt(latestSynced.toLocaleTimeString());
+        setSyncSource(
+          chessPlatform === "all"
+            ? `Supabase snapshot (Combined · ${selectedPlayers.join(" + ")})`
+            : `Supabase snapshot (${CHESS_PLATFORM_LABEL[chessPlatform]} · ${selectedPlayers[0]})`
+        );
+        setPgnLoading(false);
+        return;
       }
 
-      const directText =
-        chessPlatform === "lichess"
-          ? await (async () => {
-              const directRes = await fetch(directLichessUrl, {
-                headers: { Accept: "application/x-chess-pgn,text/plain;q=0.9,*/*;q=0.8" },
-              });
-              if (!directRes.ok) throw new Error("lichess");
-              return directRes.text();
-            })()
-          : await fetchChessComPgnDirect(username, 220);
+      const directChunks = await Promise.all(
+        selectedPlatforms.map((platform) => fetchDirectPgnForPlatform(platform, 220))
+      );
+      const directText = mergeValidPgn(directChunks);
       if (!directText.trim() || !isValidPgn(directText)) {
         setPgnError(`Live sync failed. No valid ${CHESS_PLATFORM_LABEL[chessPlatform]} PGN returned.`);
         setPgnText("");
@@ -1374,9 +1647,15 @@ export default function HobbyDetail() {
       }
       setPgnText(directText);
       setLastSyncedAt(new Date().toLocaleTimeString());
-      setSyncSource(`Direct ${CHESS_PLATFORM_LABEL[chessPlatform]} (${username})`);
+      setSyncSource(
+        chessPlatform === "all"
+          ? `Direct Combined (${selectedPlayers.join(" + ")})`
+          : `Direct ${CHESS_PLATFORM_LABEL[chessPlatform]} (${selectedPlayers[0]})`
+      );
     } catch {
-      setPgnError(`Live sync failed. Unable to reach API/${CHESS_PLATFORM_LABEL[chessPlatform]} from this environment.`);
+      setPgnError(
+        `Live sync failed. Unable to reach API/${CHESS_PLATFORM_LABEL[chessPlatform]} from this environment.`
+      );
       setPgnText("");
     }
 
@@ -1385,37 +1664,44 @@ export default function HobbyDetail() {
 
   useEffect(() => {
     if (!isChess) return;
-    const username = platformUsername;
     const loadSnapshot = async () => {
       if (isLocalDev) {
         await syncChessData();
         return;
       }
       try {
-        const res = await fetch(
-          `/api/chess-data?platform=${chessPlatform}&username=${encodeURIComponent(username)}`,
-          {
-          headers: { Accept: "application/json" },
-          }
+        const snapshots = await Promise.all(
+          selectedPlatforms.map(async (platform) => {
+            const username = CHESS_USERS[platform];
+            const res = await fetch(
+              `/api/chess-data?platform=${platform}&username=${encodeURIComponent(username)}`,
+              { headers: { Accept: "application/json" } }
+            );
+            if (!res.ok) return null;
+            const data = await res.json();
+            if (!data?.pgn || !isValidPgn(data.pgn)) return null;
+            if (platform === "lichess" && chessPlatform === "lichess" && !hasLichessAnalysisData(data.pgn)) {
+              return null;
+            }
+            return { pgn: data.pgn as string, syncedAt: data.syncedAt as string | undefined };
+          })
         );
-        if (!res.ok) {
+        const snapshotText = mergeValidPgn(snapshots.map((entry) => entry?.pgn ?? ""));
+        if (!snapshotText) {
           await syncChessData();
           return;
         }
-        const data = await res.json();
-        if (!data?.pgn || !isValidPgn(data.pgn)) {
-          await syncChessData();
-          return;
-        }
-        if (chessPlatform === "lichess" && !hasLichessAnalysisData(data.pgn)) {
-          await syncChessData();
-          return;
-        }
-        setPgnText(data.pgn);
-        setLastSyncedAt(
-          data.syncedAt ? new Date(data.syncedAt).toLocaleTimeString() : new Date().toLocaleTimeString()
+        const syncedAtValues = snapshots
+          .map((entry) => (entry?.syncedAt ? new Date(entry.syncedAt).getTime() : 0))
+          .filter((t) => t > 0);
+        const latestSynced = syncedAtValues.length > 0 ? new Date(Math.max(...syncedAtValues)) : new Date();
+        setPgnText(snapshotText);
+        setLastSyncedAt(latestSynced.toLocaleTimeString());
+        setSyncSource(
+          chessPlatform === "all"
+            ? `Supabase snapshot (Combined · ${selectedPlayers.join(" + ")})`
+            : `Supabase snapshot (${CHESS_PLATFORM_LABEL[chessPlatform]} · ${selectedPlayers[0]})`
         );
-        setSyncSource(`Supabase snapshot (${CHESS_PLATFORM_LABEL[chessPlatform]} · ${username})`);
       } catch {
         await syncChessData();
       }
@@ -1423,7 +1709,7 @@ export default function HobbyDetail() {
     void loadSnapshot();
     // Initial chess data load should run on page entry; manual sync button handles updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isChess, isLocalDev, chessPlatform, platformUsername]);
+  }, [isChess, isLocalDev, chessPlatform, selectedPlatforms, selectedPlayers]);
 
   const parsedChessGames = useMemo(
     () => (isChess && pgnText ? parsePgnHeaders(pgnText) : []),
@@ -1431,10 +1717,13 @@ export default function HobbyDetail() {
   );
 
   const chessSummary = useMemo(
-    () => (parsedChessGames.length > 0 ? buildChessSummary(parsedChessGames) : null),
-    [parsedChessGames]
+    () => (parsedChessGames.length > 0 ? buildChessSummary(parsedChessGames, selectedPlayers) : null),
+    [parsedChessGames, selectedPlayers]
   );
-  const coachPerspective = useMemo(() => buildPlayerPerspective(parsedChessGames), [parsedChessGames]);
+  const coachPerspective = useMemo(
+    () => buildPlayerPerspective(parsedChessGames, selectedPlayers),
+    [parsedChessGames, selectedPlayers]
+  );
   const ratingSeriesWindow = useMemo(() => {
     if (!chessSummary) return [];
     const total = chessSummary.ratingSeries.length;
@@ -1452,13 +1741,14 @@ export default function HobbyDetail() {
     const row = chessSummary.signalRows.find((r) => r.gameNumber === selectedSignalGame);
     return row ? [row] : [];
   }, [chessSummary, selectedSignalGame]);
-  const selectedGameRow = useMemo(() => {
-    if (!chessSummary || chessSummary.signalRows.length === 0) return null;
-    return (
-      chessSummary.signalRows.find((r) => r.gameNumber === selectedSignalGame) ??
-      chessSummary.signalRows[chessSummary.signalRows.length - 1]
-    );
-  }, [chessSummary, selectedSignalGame]);
+  const myMovesTrendRows = useMemo(() => {
+    if (!chessSummary) return [];
+    if (selectedMovesGame < 0) {
+      return chessSummary.signalRows.map((row) => ({ game: row.game, myMoves: row.myMoves }));
+    }
+    const row = chessSummary.signalRows.find((r) => r.gameNumber === selectedMovesGame);
+    return row ? [{ game: row.game, myMoves: row.myMoves }] : [];
+  }, [chessSummary, selectedMovesGame]);
   const activeSignalRows = signalsViewMode === "game" ? signalRowsGame : signalRowsWindow;
   const trendRowsWindow = useMemo(() => {
     if (!chessSummary) return [];
@@ -1516,6 +1806,81 @@ export default function HobbyDetail() {
     if (analysisWindow === -1) return games;
     return games.slice(-effectiveAnalysisWindowFromPerspective);
   }, [analysisViewMode, analysisWindow, coachPerspective, effectiveAnalysisWindowFromPerspective, selectedAnalysisGame]);
+  const overviewRows = useMemo<OverviewGameRow[]>(() => {
+    const games = coachPerspective?.games ?? [];
+    const selectedWindow = OVERVIEW_WINDOWS.find((w) => w.value === overviewWindow);
+    const cutoff =
+      selectedWindow?.days != null ? Date.now() - selectedWindow.days * 24 * 60 * 60 * 1000 : null;
+
+    return games
+      .map((g, i) => ({ ...g, gameNumber: i + 1 }))
+      .filter((g) => {
+        if (overviewColorFilter === "white" && g.myColor !== "White") return false;
+        if (overviewColorFilter === "black" && g.myColor !== "Black") return false;
+        if (cutoff == null) return true;
+        return g.date ? g.date.getTime() >= cutoff : false;
+      });
+  }, [coachPerspective, overviewColorFilter, overviewWindow]);
+  const overviewRowsDesc = useMemo(
+    () =>
+      [...overviewRows].sort((a, b) => {
+        const ta = a.date ? a.date.getTime() : 0;
+        const tb = b.date ? b.date.getTime() : 0;
+        if (tb !== ta) return tb - ta;
+        return b.gameNumber - a.gameNumber;
+      }),
+    [overviewRows]
+  );
+  const overviewStats = useMemo<OverviewStats>(() => {
+    const scored = overviewRows.filter((g) => g.myResult === "win" || g.myResult === "draw" || g.myResult === "loss");
+    const wins = scored.filter((g) => g.myResult === "win");
+    const draws = scored.filter((g) => g.myResult === "draw");
+    const losses = scored.filter((g) => g.myResult === "loss");
+    const scoredCount = scored.length;
+    const avgOppFrom = (rows: OverviewGameRow[]) => {
+      const ratings = rows.map((g) => g.oppRating).filter((r): r is number => typeof r === "number");
+      if (ratings.length === 0) return null;
+      return Math.round(ratings.reduce((sum, r) => sum + r, 0) / ratings.length);
+    };
+    const bestWinByRating = [...wins]
+      .filter((g) => typeof g.oppRating === "number")
+      .sort((a, b) => (b.oppRating ?? 0) - (a.oppRating ?? 0))[0];
+    const bestWin = bestWinByRating ?? wins[0] ?? null;
+
+    let bestStreak = 0;
+    let currentStreak = 0;
+    let bestStreakEnd: OverviewGameRow | null = null;
+    overviewRows.forEach((g) => {
+      if (g.myResult === "win") {
+        currentStreak += 1;
+        if (currentStreak > bestStreak) {
+          bestStreak = currentStreak;
+          bestStreakEnd = g;
+        }
+      } else {
+        currentStreak = 0;
+      }
+    });
+
+    return {
+      totalGames: overviewRows.length,
+      scoredCount,
+      wins: wins.length,
+      draws: draws.length,
+      losses: losses.length,
+      winPct: percentOf(wins.length, scoredCount),
+      drawPct: percentOf(draws.length, scoredCount),
+      lossPct: percentOf(losses.length, scoredCount),
+      scorePct: scoredCount > 0 ? ((wins.length + draws.length * 0.5) / scoredCount) * 100 : 0,
+      avgOpp: avgOppFrom(overviewRows),
+      avgOppWin: avgOppFrom(wins),
+      avgOppLoss: avgOppFrom(losses),
+      avgOppDraw: avgOppFrom(draws),
+      bestWin,
+      bestStreak,
+      bestStreakEnd,
+    };
+  }, [overviewRows]);
   const signalCards: Array<{ label: string; field: keyof MoveSignalCounts }> = [
     { label: "Brilliant", field: "brilliants" },
     { label: "Best", field: "bestMoves" },
@@ -1539,6 +1904,12 @@ export default function HobbyDetail() {
       setSelectedSignalGame(latestGameNumber);
     }
   }, [chessSummary, selectedSignalGame]);
+  useEffect(() => {
+    if (!chessSummary || chessSummary.signalRows.length === 0) return;
+    if (selectedMovesGame < 0) return;
+    const hasSelected = chessSummary.signalRows.some((row) => row.gameNumber === selectedMovesGame);
+    if (!hasSelected) setSelectedMovesGame(-1);
+  }, [chessSummary, selectedMovesGame]);
   useEffect(() => {
     const games = coachPerspective?.games ?? [];
     if (games.length === 0) return;
@@ -1575,6 +1946,45 @@ export default function HobbyDetail() {
   return (
     <div className="px-4 pb-20">
       <div className="mx-auto max-w-5xl space-y-6">
+        {isChess ? (
+          <div className="flex justify-center">
+            <div className="inline-flex rounded-xl border border-white/15 bg-[#0b1320] p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+              {(["lichess", "chesscom", "all"] as ChessPlatform[]).map((platform) => (
+                <button
+                  key={platform}
+                  type="button"
+                  onClick={() => setChessPlatform(platform)}
+                  className={`rounded-lg px-4 py-2 text-sm transition ${
+                    chessPlatform === platform
+                      ? "bg-cyan-300/20 text-cyan-100 border border-cyan-300/35"
+                      : "text-white/70 hover:bg-white/8"
+                  }`}
+                >
+                  {CHESS_PLATFORM_LABEL[platform]}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : isMusic ? (
+          <div className="flex justify-center">
+            <div className="inline-flex rounded-xl border border-white/15 bg-[#0b1320] p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+              {MUSIC_DISCIPLINE_VIEWS.map((view) => (
+                <button
+                  key={view.key}
+                  type="button"
+                  onClick={() => setMusicDiscipline(view.key)}
+                  className={`rounded-lg px-4 py-2 text-sm transition ${
+                    musicDiscipline === view.key
+                      ? "bg-cyan-300/20 text-cyan-100 border border-cyan-300/35"
+                      : "text-white/70 hover:bg-white/8"
+                  }`}
+                >
+                  {view.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <section className="showcase-card p-6 md:p-8">
           {!isChess ? <p className="section-kicker mb-2">Hobby Detail</p> : null}
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1631,27 +2041,31 @@ export default function HobbyDetail() {
               ))}
             </div>
           ) : null}
+          {isMusic ? (
+            <div className="mt-5 space-y-3">
+              {(() => {
+                const active = MUSIC_DISCIPLINE_VIEWS.find((view) => view.key === musicDiscipline);
+                if (!active) return null;
+                return (
+                  <article className="showcase-inner-card">
+                    <p className="section-kicker mb-1">Music Dashboard</p>
+                    <h2 className="text-2xl font-semibold text-white/95">{active.label}</h2>
+                    <p className="text-white/70 mt-1">{active.subtitle}</p>
+                    <ul className="mt-3 text-sm text-white/78 space-y-1.5 list-disc list-inside">
+                      {active.bullets.map((item) => (
+                        <li key={`${active.key}-${item}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </article>
+                );
+              })()}
+            </div>
+          ) : null}
 
           {isChess ? (
             <div>
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+            <div className="mb-2">
               <h2 className="section-title">Dashboards</h2>
-              <div className="inline-flex rounded-lg border border-white/15 bg-[#0b1320] p-1">
-                {(["lichess", "chesscom"] as ChessPlatform[]).map((platform) => (
-                  <button
-                    key={platform}
-                    type="button"
-                    onClick={() => setChessPlatform(platform)}
-                    className={`rounded-md px-3 py-1.5 text-sm transition ${
-                      chessPlatform === platform
-                        ? "bg-cyan-300/20 text-cyan-100 border border-cyan-300/35"
-                        : "text-white/70 hover:bg-white/8"
-                    }`}
-                  >
-                    {CHESS_PLATFORM_LABEL[platform]}
-                  </button>
-                ))}
-              </div>
             </div>
             {lastSyncedAt ? (
               <p className="text-xs text-white/50 -mt-1 mb-3">
@@ -1659,44 +2073,211 @@ export default function HobbyDetail() {
                 {syncSource ? ` · Source: ${syncSource}` : ""}
               </p>
             ) : null}
-            <p className="text-xs text-white/55 mb-4">
-              Snapshot-first sync with Supabase. On the Hobby plan, dashboard updates are shown once per day.
-            </p>
+            {chessPlatform !== "lichess" ? (
+              <p className="text-xs text-amber-200/80 -mt-1 mb-2">
+                Chess.com is connected via a free account. Advanced review/signal tags are limited, so Chess.com data includes fewer analysis labels.
+              </p>
+            ) : null}
             {pgnLoading ? <p className="text-white/65">Loading PGN data...</p> : null}
             {pgnError ? <p className="text-red-300/85">{pgnError}</p> : null}
             {!pgnLoading && chessSummary ? (
               <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <article className="showcase-inner-card">
-                    <p className="text-xs uppercase tracking-wider text-white/60">Games</p>
-                    <p className="text-lg font-semibold mt-1">{chessSummary.totalGames}</p>
-                  </article>
-                  <article className="showcase-inner-card">
-                    <p className="text-xs uppercase tracking-wider text-white/60">White/Black Win %</p>
-                    <p className="text-lg font-semibold mt-1">
-                      {chessSummary.whiteWinRate.toFixed(0)} / {chessSummary.blackWinRate.toFixed(0)}
+                <article className="showcase-inner-card overflow-hidden">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
+                    <div>
+                      <p className="text-sm font-semibold text-white/90">Performance Overview</p>
+                      <p className="text-xs text-white/55">{overviewStats.totalGames} games</p>
+                    </div>
+                    <div className="inline-flex rounded-lg border border-white/10 bg-white/[0.03] p-1">
+                      {OVERVIEW_WINDOWS.map((window) => (
+                        <button
+                          key={window.value}
+                          type="button"
+                          onClick={() => setOverviewWindow(window.value)}
+                          className={`rounded-md px-2.5 py-1 text-xs transition ${
+                            overviewWindow === window.value
+                              ? "bg-white/15 text-white"
+                              : "text-white/60 hover:bg-white/10"
+                          }`}
+                        >
+                          {window.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <div className="inline-flex rounded-lg border border-white/10 bg-white/[0.03] p-1">
+                      {([
+                        { key: "all", label: "All Games" },
+                        { key: "white", label: "White" },
+                        { key: "black", label: "Black" },
+                      ] as Array<{ key: OverviewColorFilter; label: string }>).map((tab) => (
+                        <button
+                          key={tab.key}
+                          type="button"
+                          onClick={() => setOverviewColorFilter(tab.key)}
+                          className={`rounded-md px-3 py-1.5 text-xs sm:text-sm transition ${
+                            overviewColorFilter === tab.key
+                              ? "bg-white/15 text-white"
+                              : "text-white/60 hover:bg-white/10"
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="mt-4 rounded-xl border border-white/10 bg-[#0a101b]/75 p-4">
+                    <div className="h-3 w-full overflow-hidden rounded-full bg-white/10">
+                      <div className="flex h-full w-full">
+                        <div
+                          className="h-full bg-emerald-400"
+                          style={{ width: `${overviewStats.winPct}%` }}
+                        />
+                        <div
+                          className="h-full bg-red-500"
+                          style={{ width: `${overviewStats.lossPct}%` }}
+                        />
+                        <div
+                          className="h-full bg-slate-300/80"
+                          style={{ width: `${overviewStats.drawPct}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                      <div>
+                        <p className="text-2xl font-semibold text-emerald-300">{overviewStats.wins}</p>
+                        <p className="text-sm font-medium text-emerald-300">{overviewStats.winPct.toFixed(0)}% Win</p>
+                      </div>
+                      <div>
+                        <p className="text-2xl font-semibold text-red-400">{overviewStats.losses}</p>
+                        <p className="text-sm font-medium text-red-400">{overviewStats.lossPct.toFixed(0)}% Loss</p>
+                      </div>
+                      <div>
+                        <p className="text-2xl font-semibold text-slate-200">{overviewStats.draws}</p>
+                        <p className="text-sm font-medium text-slate-200">{overviewStats.drawPct.toFixed(0)}% Draw</p>
+                      </div>
+                    </div>
+                    {chessPlatform === "all" ? (
+                      <div className="mt-4 text-center">
+                        <p className="text-xs uppercase tracking-[0.14em] text-white/55">Average Opponent Rating</p>
+                        <p className="text-3xl font-semibold text-white">{overviewStats.avgOpp ?? "-"}</p>
+                        <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-sm">
+                          <span className="text-emerald-300">+ {overviewStats.avgOppWin ?? "-"}</span>
+                          <span className="text-red-400">- {overviewStats.avgOppLoss ?? "-"}</span>
+                          <span className="text-slate-300">= {overviewStats.avgOppDraw ?? "-"}</span>
+                        </div>
+                      </div>
+                    ) : null}
+                    {chessPlatform !== "all" ? (
+                      <div className="mt-4">
+                        <p className="mb-3 text-center text-xs text-cyan-100/75">
+                          Overall win rate: {overviewStats.scorePct.toFixed(1)}%
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                          <p className="text-xs uppercase tracking-[0.14em] text-white/55">Best Win</p>
+                          <p className="mt-1 text-2xl font-semibold text-white">
+                            {overviewStats.bestWin?.oppRating ?? "-"}
+                          </p>
+                          <p className="text-sm text-white/80">
+                            {overviewStats.bestWin?.oppName ?? "No win in selected range"}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                          <p className="text-xs uppercase tracking-[0.14em] text-white/55">Best Streak</p>
+                          <p className="mt-1 text-2xl font-semibold text-white">{overviewStats.bestStreak}</p>
+                          <p className="text-sm text-white/80">
+                            {overviewStats.bestStreakEnd
+                              ? formatShortDate(overviewStats.bestStreakEnd.date)
+                              : "No streak yet"}
+                          </p>
+                        </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="mt-4 rounded-xl border border-white/10 bg-[#0a101b]/75">
+                    <div className="flex items-center border-b border-white/10 px-4 py-2.5">
+                      <p className="text-sm font-semibold text-white/90">Completed Games</p>
+                    </div>
+                    <div className="max-h-72 overflow-y-auto">
+                      {overviewRowsDesc.length > 0 ? (
+                        overviewRowsDesc.map((game) => (
+                          <div
+                            key={`overview-row-${game.gameNumber}`}
+                            className="flex items-center justify-between gap-3 border-b border-white/5 px-4 py-2.5 last:border-b-0"
+                          >
+                            <div className="min-w-0 flex items-center gap-3">
+                              <span className="text-sm font-semibold text-white/65 w-8 shrink-0">
+                                {game.gameNumber}.
+                              </span>
+                              <div className="min-w-0">
+                                <p className="truncate text-sm text-white/90">
+                                  {game.oppName} {typeof game.oppRating === "number" ? `(${game.oppRating})` : ""}
+                                </p>
+                                <p className="text-xs text-white/55">
+                                  {formatShortDate(game.date)} · {game.myColor}
+                                  {chessPlatform === "all"
+                                    ? ` · ${accountToPlatformLabel(game.myAccount)}`
+                                    : ""}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${
+                                  game.myResult === "win"
+                                    ? "border-emerald-300/55 bg-emerald-300/20 text-emerald-200"
+                                    : game.myResult === "loss"
+                                      ? "border-red-300/70 bg-red-500/35 text-red-100"
+                                      : game.myResult === "draw"
+                                        ? "border-slate-300/35 bg-slate-300/15 text-slate-100"
+                                        : "border-white/20 bg-white/5 text-white/65"
+                                }`}
+                              >
+                                {game.myResult === "win"
+                                  ? "+"
+                                  : game.myResult === "loss"
+                                    ? "-"
+                                  : game.myResult === "draw"
+                                      ? "="
+                                      : "?"}
+                              </span>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="px-4 py-3 text-sm text-white/55">No games in this filter yet.</p>
+                      )}
+                    </div>
+                  </div>
+                </article>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-12 gap-3">
+                  <article
+                    className={`showcase-inner-card ${chessPlatform === "all" ? "xl:col-span-4" : "xl:col-span-6"}`}
+                  >
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-white/55">White Win %</p>
+                    <p className="text-2xl font-semibold mt-1 text-white/95">
+                      {chessSummary.whiteWinRate.toFixed(0)}%
                     </p>
                   </article>
-                  <article className="showcase-inner-card">
-                    <p className="text-xs uppercase tracking-wider text-white/60">Avg Opponent</p>
-                    <p className="text-lg font-semibold mt-1">
-                      {chessSummary.avgOpponent ?? "-"}
+                  <article
+                    className={`showcase-inner-card ${chessPlatform === "all" ? "xl:col-span-4" : "xl:col-span-6"}`}
+                  >
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-white/55">Black Win %</p>
+                    <p className="text-2xl font-semibold mt-1 text-white/95">
+                      {chessSummary.blackWinRate.toFixed(0)}%
                     </p>
                   </article>
-                </div>
-                <div className="grid grid-cols-3 gap-3">
-                  <article className="showcase-inner-card">
-                    <p className="text-xs uppercase tracking-wider text-white/60">Wins</p>
-                    <p className="text-lg font-semibold mt-1 text-emerald-100">{chessSummary.wins}</p>
-                  </article>
-                  <article className="showcase-inner-card">
-                    <p className="text-xs uppercase tracking-wider text-white/60">Draws</p>
-                    <p className="text-lg font-semibold mt-1 text-slate-100">{chessSummary.draws}</p>
-                  </article>
-                  <article className="showcase-inner-card">
-                    <p className="text-xs uppercase tracking-wider text-white/60">Losses</p>
-                    <p className="text-lg font-semibold mt-1 text-rose-100">{chessSummary.losses}</p>
-                  </article>
+                  {chessPlatform === "all" ? (
+                    <article className="showcase-inner-card xl:col-span-4">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-white/55">Avg Opponent</p>
+                      <p className="text-2xl font-semibold mt-1">{chessSummary.avgOpponent ?? "-"}</p>
+                    </article>
+                  ) : null}
+
                 </div>
 
                 <div className="showcase-inner-card">
@@ -1756,42 +2337,31 @@ export default function HobbyDetail() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <article className="showcase-inner-card flex flex-col">
-                    <p className="text-sm uppercase tracking-wider text-white/60 mb-2 inline-flex items-center gap-2">
-                      Results
-                      <HoverHelp text="Complete game result history. Newest game appears at the top." />
+                <article className="showcase-inner-card">
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                    <p className="text-sm uppercase tracking-wider text-white/60 inline-flex items-center gap-2">
+                      Your Moves Trend
+                      <HoverHelp text="Tracks your move count per game over time. Hover each point for exact date and moves." />
                     </p>
-                    <div className="max-h-[28rem] overflow-y-auto pr-1 space-y-1.5">
-                      {chessSummary.gameResults.length > 0 ? (
-                        [...chessSummary.gameResults].reverse().map((r, idx) => {
-                          const gameNum = chessSummary.gameResults.length - idx;
-                          return (
-                            <div
-                              key={`${r}-${idx}`}
-                              className="flex items-center justify-between rounded-md border border-white/10 bg-white/5 px-2 py-1"
-                            >
-                              <span className="text-xs text-white/65">Game {gameNum}</span>
-                              <span
-                                className={`inline-flex h-5 min-w-5 px-1 items-center justify-center rounded text-[11px] font-semibold ${
-                              r === "W"
-                                ? "bg-emerald-400/20 text-emerald-100 border border-emerald-300/35"
-                                : r === "D"
-                                  ? "bg-slate-400/20 text-slate-100 border border-slate-300/30"
-                                  : "bg-rose-400/20 text-rose-100 border border-rose-300/35"
-                            }`}
-                              >
-                                {r}
-                              </span>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <p className="text-white/55 text-sm">No recent form data yet.</p>
-                      )}
-                    </div>
-                  </article>
+                    <select
+                      value={selectedMovesGame}
+                      onChange={(e) => setSelectedMovesGame(Number(e.target.value))}
+                      className="rounded-lg border border-white/15 bg-[#0b1320] px-2.5 py-1.5 text-sm text-white/85"
+                    >
+                      <option value={-1}>All Games</option>
+                      {[...chessSummary.signalRows]
+                        .sort((a, b) => b.gameNumber - a.gameNumber)
+                        .map((row) => (
+                          <option key={`moves-game-${row.gameNumber}`} value={row.gameNumber}>
+                            {`Game ${row.gameNumber} (${row.game})`}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                  <MyMovesTrendChart rows={myMovesTrendRows} />
+                </article>
 
+                <div className="grid grid-cols-1 gap-3">
                   <article className="showcase-inner-card">
                     <p className="text-sm uppercase tracking-wider text-white/60 mb-2 inline-flex items-center gap-2">
                       Openings Used
@@ -1821,122 +2391,130 @@ export default function HobbyDetail() {
                       )}
                     </div>
                     <div className="mt-3 space-y-2.5">
-                      <div className="rounded-lg border border-cyan-300/25 bg-cyan-300/10 px-4 py-3.5 min-h-24">
-                        <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-100/75">
-                          {selectedGameRow ? `Your Moves (Game ${selectedGameRow.gameNumber})` : "Your Moves"}
-                        </p>
-                        <p className="text-2xl leading-tight font-semibold text-cyan-50 mt-1">
-                          {selectedGameRow ? selectedGameRow.myMoves : "-"}
-                        </p>
-                      </div>
-                      <div className="rounded-lg border border-rose-300/25 bg-rose-300/10 px-4 py-3.5 min-h-24">
-                        <p className="text-[10px] uppercase tracking-[0.14em] text-rose-100/75">Time Forfeits</p>
-                        <p className="text-2xl leading-tight font-semibold text-rose-50 mt-1">
-                          {chessSummary.timeForfeits}
-                        </p>
-                        <p className="text-xs text-rose-100/85 mt-0.5">
-                          {chessSummary.timeForfeitRate.toFixed(0)}% of games
-                        </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div className="rounded-lg border border-rose-300/25 bg-rose-300/10 px-4 py-3.5 min-h-24">
+                          <p className="text-[10px] uppercase tracking-[0.14em] text-rose-100/75">Flagged Out</p>
+                          <p className="text-2xl leading-tight font-semibold text-rose-50 mt-1">
+                            {chessSummary.myTimeForfeits}
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-emerald-300/25 bg-emerald-300/10 px-4 py-3.5 min-h-24">
+                          <p className="text-[10px] uppercase tracking-[0.14em] text-emerald-100/75">Flagged Opponent</p>
+                          <p className="text-2xl leading-tight font-semibold text-emerald-50 mt-1">
+                            {chessSummary.opponentTimeForfeits}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </article>
                 </div>
 
-                <article className="showcase-inner-card">
-                  <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                    <p className="text-sm uppercase tracking-wider text-white/60 inline-flex items-center gap-2">
-                      Signals
-                      <HoverHelp text="Uses platform-provided labels when present; falls back to eval tags when available. Badge shows Exact vs Estimated." />
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={signalsViewMode}
-                        onChange={(e) => setSignalsViewMode(e.target.value as "window" | "game")}
-                        className="rounded-lg border border-white/15 bg-[#0b1320] px-2.5 py-1.5 text-sm text-white/85"
-                      >
-                        <option value="window">Totals</option>
-                        <option value="game">Single Game</option>
-                      </select>
-                      {signalsViewMode === "game" ? (
-                        <select
-                          value={selectedSignalGame}
-                          onChange={(e) => setSelectedSignalGame(Number(e.target.value))}
-                          className="rounded-lg border border-white/15 bg-[#0b1320] px-2.5 py-1.5 text-sm text-white/85"
-                        >
-                          {[...chessSummary.signalRows]
-                            .sort((a, b) => b.gameNumber - a.gameNumber)
-                            .map((row) => (
-                            <option key={`signal-game-${row.gameNumber}`} value={row.gameNumber}>
-                              {`Game ${row.gameNumber} (${row.game})`}
-                            </option>
-                            ))}
-                        </select>
-                      ) : null}
-                      <span className="rounded-lg border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-white/70">
-                        {signalsSourceBadge}
-                      </span>
-                      {signalsViewMode === "window" ? (
-                        <select
-                          value={signalsWindow}
-                          onChange={(e) => setSignalsWindow(Number(e.target.value))}
-                          className="rounded-lg border border-white/15 bg-[#0b1320] px-2.5 py-1.5 text-sm text-white/85"
-                        >
-                          {WINDOW_OPTIONS.map((n) => (
-                            <option key={n} value={n}>
-                              {n === 1 ? "Most Recent Game" : `Last ${n} Games`}
-                            </option>
-                          ))}
-                        </select>
-                      ) : null}
-                    </div>
-                  </div>
-                  {!hasSignalSourceData ? (
-                    <p className="mb-3 text-xs text-amber-200/85">
-                      No analysis signal tags found in the current snapshot yet. Signals populate from labels first, then eval tags.
-                    </p>
-                  ) : null}
-                  <div className="mb-3 flex flex-wrap justify-center gap-2">
-                    {visibleSignalCards.map((metric) => (
-                      <div
-                        key={metric.field}
-                        className="w-[10.5rem] rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm"
-                      >
-                        <p className="text-[11px] uppercase tracking-wider text-white/55">{metric.label}</p>
-                        <p className="text-white/90 font-semibold">{latestSignalRow?.[metric.field] ?? 0}</p>
+                {chessPlatform !== "chesscom" ? (
+                  <>
+                    <article className="showcase-inner-card">
+                      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                        <p className="text-sm uppercase tracking-wider text-white/60 inline-flex items-center gap-2">
+                          Signals
+                          <HoverHelp text="Uses platform-provided labels when present; falls back to eval tags when available. Badge shows Exact vs Estimated." />
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={signalsViewMode}
+                            onChange={(e) => setSignalsViewMode(e.target.value as "window" | "game")}
+                            className="rounded-lg border border-white/15 bg-[#0b1320] px-2.5 py-1.5 text-sm text-white/85"
+                          >
+                            <option value="window">Totals</option>
+                            <option value="game">Single Game</option>
+                          </select>
+                          {signalsViewMode === "game" ? (
+                            <select
+                              value={selectedSignalGame}
+                              onChange={(e) => setSelectedSignalGame(Number(e.target.value))}
+                              className="rounded-lg border border-white/15 bg-[#0b1320] px-2.5 py-1.5 text-sm text-white/85"
+                            >
+                              {[...chessSummary.signalRows]
+                                .sort((a, b) => b.gameNumber - a.gameNumber)
+                                .map((row) => (
+                                  <option key={`signal-game-${row.gameNumber}`} value={row.gameNumber}>
+                                    {`Game ${row.gameNumber} (${row.game})`}
+                                  </option>
+                                ))}
+                            </select>
+                          ) : null}
+                          <span className="rounded-lg border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-white/70">
+                            {signalsSourceBadge}
+                          </span>
+                          {signalsViewMode === "window" ? (
+                            <select
+                              value={signalsWindow}
+                              onChange={(e) => setSignalsWindow(Number(e.target.value))}
+                              className="rounded-lg border border-white/15 bg-[#0b1320] px-2.5 py-1.5 text-sm text-white/85"
+                            >
+                              {WINDOW_OPTIONS.map((n) => (
+                                <option key={n} value={n}>
+                                  {n === 1 ? "Most Recent Game" : `Last ${n} Games`}
+                                </option>
+                              ))}
+                            </select>
+                          ) : null}
+                        </div>
                       </div>
-                    ))}
-                    {visibleSignalCards.length === 0 ? (
-                      <div className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/65">
-                        No signals detected for the latest game in this window.
+                      {!hasSignalSourceData ? (
+                        <p className="mb-3 text-xs text-amber-200/85">
+                          No analysis signal tags found in the current snapshot yet. Signals populate from labels first, then eval tags.
+                        </p>
+                      ) : null}
+                      <div className="mb-3 flex flex-wrap justify-center gap-2">
+                        {visibleSignalCards.map((metric) => (
+                          <div
+                            key={metric.field}
+                            className="w-[10.5rem] rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                          >
+                            <p className="text-[11px] uppercase tracking-wider text-white/55">{metric.label}</p>
+                            <p className="text-white/90 font-semibold">{latestSignalRow?.[metric.field] ?? 0}</p>
+                          </div>
+                        ))}
+                        {visibleSignalCards.length === 0 ? (
+                          <div className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/65">
+                            No signals detected for the latest game in this window.
+                          </div>
+                        ) : null}
+                        <div className="w-[10.5rem] rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm">
+                          <p className="text-[11px] uppercase tracking-wider text-white/55">Avg Blunders / Game</p>
+                          <p className="text-white/90 font-semibold">
+                            {activeSignalRows.length > 0
+                              ? (
+                                  activeSignalRows.reduce((sum, row) => sum + row.blunders, 0) /
+                                  activeSignalRows.length
+                                ).toFixed(2)
+                              : "0.00"}
+                          </p>
+                        </div>
                       </div>
-                    ) : null}
-                    <div className="w-[10.5rem] rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm">
-                      <p className="text-[11px] uppercase tracking-wider text-white/55">Avg Blunders / Game</p>
-                      <p className="text-white/90 font-semibold">
-                        {activeSignalRows.length > 0
-                          ? (
-                              activeSignalRows.reduce((sum, row) => sum + row.blunders, 0) /
-                              activeSignalRows.length
-                            ).toFixed(2)
-                          : "0.00"}
-                      </p>
-                    </div>
-                  </div>
-                  <MiniSignalsChart rows={activeSignalRows} />
-                </article>
+                      <MiniSignalsChart rows={activeSignalRows} />
+                    </article>
 
-                <article className="showcase-inner-card">
-                  <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                    <p className="text-sm uppercase tracking-wider text-white/60 inline-flex items-center gap-2">
-                      Blunder Trend
-                      <HoverHelp text="Trend line for blunders across your full game history." />
+                    <article className="showcase-inner-card">
+                      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                        <p className="text-sm uppercase tracking-wider text-white/60 inline-flex items-center gap-2">
+                          Blunder Trend
+                          <HoverHelp text="Trend line for blunders across your full game history." />
+                        </p>
+                        <span className="rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-xs text-white/65">
+                          All Games
+                        </span>
+                      </div>
+                      <BlunderTrendChart rows={trendRowsWindow} />
+                    </article>
+                  </>
+                ) : (
+                  <article className="showcase-inner-card">
+                    <p className="text-sm uppercase tracking-wider text-white/60">Signals</p>
+                    <p className="mt-2 text-sm text-white/65">
+                      Signal and blunder-trend tables are hidden for Chess.com view because this account is on the free tier and those review tags are often unavailable.
                     </p>
-                    <span className="rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-xs text-white/65">
-                      All Games
-                    </span>
-                  </div>
-                  <BlunderTrendChart rows={trendRowsWindow} />
-                </article>
+                  </article>
+                )}
 
                 <article className="showcase-inner-card">
                   <div className="flex flex-wrap items-center justify-between gap-3 mb-3">

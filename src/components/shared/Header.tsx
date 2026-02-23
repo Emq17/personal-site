@@ -5,12 +5,14 @@ import { forwardRef, useEffect, useState } from "react";
 const sectionLinks = [
   { label: "Home", href: "/#hero" },
   { label: "Skills", href: "/#skills" },
+  { label: "Languages", href: "/#languages" },
   { label: "Projects", href: "/#projects" },
   { label: "Experience", href: "/#experience" },
   { label: "Education", href: "/#education" },
   { label: "Hobbies", href: "/#hobbies" },
   { label: "Travel", href: "/#travel" },
   { label: "Contact", href: "/#contact" },
+  { label: "How It Works", href: "/#how-built" },
 ];
 
 const Header = forwardRef<HTMLDivElement>((_, ref) => {
@@ -52,21 +54,22 @@ const Header = forwardRef<HTMLDivElement>((_, ref) => {
       .map((id) => document.getElementById(id))
       .filter((el): el is HTMLElement => Boolean(el));
     if (sections.length === 0) return;
+    const sectionsByPageOrder = [...sections].sort((a, b) => a.offsetTop - b.offsetTop);
 
     const detectActiveSection = () => {
       const marker = 180; // accounts for fixed header and section spacing
       let current = "#hero";
 
-      for (const section of sections) {
+      for (const section of sectionsByPageOrder) {
         const top = section.getBoundingClientRect().top;
         if (top <= marker) current = `#${section.id}`;
       }
 
-      // If we're at the bottom, force last section active (Contact).
+      // When user reaches the bottom, force-highlight the final section pill.
       const nearBottom =
         window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
       if (nearBottom) {
-        current = `#${sections[sections.length - 1].id}`;
+        current = `#${sectionsByPageOrder[sectionsByPageOrder.length - 1].id}`;
       }
 
       setActiveSection(current);
