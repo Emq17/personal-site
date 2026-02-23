@@ -35,6 +35,24 @@ Most personal sites are either resume-only or personality-only. I built this one
 - **Hobbies + Travel**: personality, interests, and global travel footprint to round out the profile
 - **Contact**: direct links for outreach
 
+### Chess Dashboard (Hobby Detail)
+- Source switcher at the top of chess detail: **Lichess** or **Chess.com**
+- Same dashboard layout for both sources
+- Signal quality modes:
+  - **Single Game** selector (defaults to most recent game)
+  - **Totals** window selector for aggregate review
+- AI Coach review modes:
+  - **Single Game** selector for game-specific coaching
+  - **Totals** window selector for aggregate coaching windows
+- Signal source labeling:
+  - **Exact** when move labels are present
+  - **Estimated** when derived from platform eval tags
+- Signals hide zero-value categories in cards/charts to reduce clutter
+- New quick metrics under opening usage:
+  - **Your Moves (Game N)** (player-only move count, not total game plies)
+  - **Time Forfeits** + rate
+- Topline result counters are split into separate cards (**Wins**, **Draws**, **Losses**) for faster scanning
+
 ## Technical Stack
 - **Frontend**: React 19 + TypeScript
 - **Build Tooling**: Vite
@@ -57,6 +75,8 @@ Most personal sites are either resume-only or personality-only. I built this one
 ## Repository Structure (Key Files)
 - `src/pages/Showcase.tsx` — main page structure and section composition
 - `src/pages/HobbyDetail.tsx` — dynamic hobby detail page
+- `api/chess-sync.js` — platform-aware chess sync (Lichess + Chess.com) to Supabase snapshots
+- `api/chess-data.js` — latest platform-filtered chess snapshot reader from Supabase
 - `src/components/shared/Header.tsx` — global navigation and section state
 - `src/components/hobbies/TravelMap.tsx` — interactive travel globe and location data interactions
 - `src/components/hobbies/content/HobbiesData.ts` — hobby content model
@@ -78,10 +98,16 @@ npm run build
 npm run preview
 ```
 
+## Chess Data Notes
+- Chess snapshots are stored in Supabase table `chess_game_snapshots`.
+- Sync/read endpoints support a `platform` query parameter:
+  - `lichess`
+  - `chesscom`
+- On-demand page loads can trigger live sync paths, so dashboard data can update before daily scheduled refreshes.
+
 ## Continuous Improvement
 This site is intentionally iterative. I treat it as a living product and personal hub:
 - content is updated as projects and experience grow
 - personal sections evolve as interests and life experiences expand
 - UI/UX is regularly refined to improve clarity and quality
 - structure is continuously tuned for readability
-

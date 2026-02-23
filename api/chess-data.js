@@ -14,10 +14,14 @@ export default async function handler(req, res) {
   }
 
   const username = String(req.query.username ?? "zaibao1").trim() || "zaibao1";
+  const platformRaw = String(req.query.platform ?? "lichess").trim().toLowerCase();
+  const platform = platformRaw === "chesscom" ? "chesscom" : "lichess";
+  const sourcePattern = platform === "chesscom" ? "*chess.com*" : "*lichess.org*";
   const { url } = getSupabaseConfig();
   const query = new URLSearchParams({
     select: "username,source,pgn,games_count,synced_at",
     username: `eq.${username}`,
+    source: `ilike.${sourcePattern}`,
     order: "synced_at.desc",
     limit: "1",
   });

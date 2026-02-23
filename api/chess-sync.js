@@ -8,11 +8,45 @@ function gameCountFromPgn(pgn) {
   return (pgn.match(/\[Event\s+"/g) ?? []).length;
 }
 
-function hasEvalData(text) {
-  return /\[%eval\s+[^\]\s]+\]/.test(text);
+async function fetchChessComPgn(username, maxGames) {
+  const archivesUrl = `https://api.chess.com/pub/player/${encodeURIComponent(username)}/games/archives`;
+  const archivesRes = await fetch(archivesUrl, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "emmette-portfolio-chess-sync/1.0",
+    },
+  });
+  if (!archivesRes.ok) return { pgn: "", source: archivesUrl };
+  const archivesData = await archivesRes.json();
+  const archiveUrls = Array.isArray(archivesData?.archives) ? archivesData.archives : [];
+  const urls = [...archiveUrls].reverse();
+  const chunks = [];
+  for (const url of urls) {
+    if (chunks.length >= maxGames) break;
+    try {
+      const monthRes = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "emmette-portfolio-chess-sync/1.0",
+        },
+      });
+      if (!monthRes.ok) continue;
+      const monthData = await monthRes.json();
+      const games = Array.isArray(monthData?.games) ? monthData.games : [];
+      for (const game of [...games].reverse()) {
+        const pgn = typeof game?.pgn === "string" ? game.pgn.trim() : "";
+        if (!isValidPgn(pgn)) continue;
+        chunks.push(pgn);
+        if (chunks.length >= maxGames) break;
+      }
+    } catch {
+      // continue
+    }
+  }
+  return { pgn: chunks.join("\n\n"), source: archivesUrl };
 }
 
-async function fetchFirstValidPgn(urls, { requireEval = false } = {}) {
+async function fetchFirstValidPgn(urls) {
   for (const url of urls) {
     try {
       const res = await fetch(url, {
@@ -24,7 +58,6 @@ async function fetchFirstValidPgn(urls, { requireEval = false } = {}) {
       if (!res.ok) continue;
       const text = await res.text();
       if (!isValidPgn(text)) continue;
-      if (requireEval && !hasEvalData(text)) continue;
       return { pgn: text, source: url };
     } catch {
       // try next source
@@ -47,24 +80,28 @@ export default async function handler(req, res) {
   }
 
   const username = String(req.query.username ?? "zaibao1").trim() || "zaibao1";
+  const platformRaw = String(req.query.platform ?? "lichess").trim().toLowerCase();
+  const platform = platformRaw === "chesscom" ? "chesscom" : "lichess";
   const maxRaw = Number.parseInt(String(req.query.max ?? "220"), 10);
   const max = Number.isFinite(maxRaw) ? Math.min(Math.max(maxRaw, 1), 300) : 220;
 
-  const exportUrl = `https://lichess.org/games/export/${encodeURIComponent(
-    username
-  )}?moves=true&tags=true&evals=true`;
-  const apiUrl = `https://lichess.org/api/games/user/${encodeURIComponent(
-    username
-  )}?max=${max}&opening=true&moves=true&evals=true&pgnInJson=false&format=pgn`;
-
-  // Prefer eval-rich API payload so quality signals can be computed.
-  let { pgn, source } = await fetchFirstValidPgn([apiUrl, exportUrl], { requireEval: true });
-  // Fallback to any valid PGN if evals are unavailable.
-  if (!pgn) {
+  let pgn = "";
+  let source = "";
+  if (platform === "chesscom") {
+    ({ pgn, source } = await fetchChessComPgn(username, max));
+  } else {
+    const exportUrl = `https://lichess.org/games/export/${encodeURIComponent(
+      username
+    )}?moves=true&tags=true&evals=true&analysed=true`;
+    const apiUrl = `https://lichess.org/api/games/user/${encodeURIComponent(
+      username
+    )}?max=${max}&opening=true&moves=true&evals=true&analysed=true&pgnInJson=false&format=pgn`;
     ({ pgn, source } = await fetchFirstValidPgn([apiUrl, exportUrl]));
   }
   if (!pgn) {
-    return res.status(502).json({ error: "Unable to fetch valid PGN from Lichess" });
+    return res.status(502).json({
+      error: `Unable to fetch valid PGN from ${platform === "chesscom" ? "Chess.com" : "Lichess"}`,
+    });
   }
 
   const { url } = getSupabaseConfig();

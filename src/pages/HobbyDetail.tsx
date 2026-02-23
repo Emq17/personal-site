@@ -12,15 +12,28 @@ type ParsedChessGame = {
   eco: string;
   timeControl: string;
   termination: string;
+  plyCount: number;
   moveCount: number;
+  annotationBestMoves: number;
+  annotationExcellentMoves: number;
+  annotationGoodMoves: number;
+  annotationBookMoves: number;
   annotationBlunders: number;
   annotationMistakes: number;
   annotationInaccuracies: number;
   annotationBrilliants: number;
+  annotationMissedWins: number;
+  blackBestMoves: number;
+  blackExcellentMoves: number;
+  blackGoodMoves: number;
+  blackBookMoves: number;
   blackBlunders: number;
   blackMistakes: number;
   blackInaccuracies: number;
   blackBrilliants: number;
+  blackMissedWins: number;
+  whiteSignalSource: SignalQualitySource;
+  blackSignalSource: SignalQualitySource;
 };
 
 type PlayerChessGame = {
@@ -33,11 +46,34 @@ type PlayerChessGame = {
   timeControl: string;
   termination: string;
   moveCount: number;
+  annotationBestMoves: number;
+  annotationExcellentMoves: number;
+  annotationGoodMoves: number;
+  annotationBookMoves: number;
   annotationBlunders: number;
   annotationMistakes: number;
   annotationInaccuracies: number;
   annotationBrilliants: number;
+  annotationMissedWins: number;
+  signalSource: SignalQualitySource;
 };
+
+type SignalQualitySource = "exact" | "estimated" | "none";
+
+type MoveSignalCounts = {
+  brilliants: number;
+  bestMoves: number;
+  excellentMoves: number;
+  goodMoves: number;
+  bookMoves: number;
+  inaccuracies: number;
+  mistakes: number;
+  blunders: number;
+  missedWins: number;
+};
+
+type SignalRow = { game: string; gameNumber: number; myMoves: number } & MoveSignalCounts;
+type SignalRowWithSource = SignalRow & { source: SignalQualitySource };
 
 type ChessSummary = {
   player: string;
@@ -54,18 +90,26 @@ type ChessSummary = {
   openingRows: Array<{ eco: string; games: number; winRate: number }>;
   openingTypeRows: Array<{ label: string; games: number; winRate: number }>;
   gameResults: Array<"W" | "D" | "L">;
-  signalRows: Array<{
-    game: string;
-    blunders: number;
-    mistakes: number;
-    inaccuracies: number;
-    brilliants: number;
-  }>;
+  signalRows: SignalRowWithSource[];
+  totalBestMoves: number;
+  totalExcellentMoves: number;
+  totalGoodMoves: number;
+  totalBookMoves: number;
   totalBlunders: number;
   totalMistakes: number;
   totalInaccuracies: number;
   totalBrilliants: number;
+  totalMissedWins: number;
   avgBlundersPerGame: number;
+  avgMovesPerGame: number;
+  avgBaseMinutesPerGame: number | null;
+  avgBaseMinutesInWins: number | null;
+  avgBaseMinutesInLosses: number | null;
+  avgMovesInWins: number | null;
+  avgMovesInDraws: number | null;
+  avgMovesInLosses: number | null;
+  timeForfeits: number;
+  timeForfeitRate: number;
   insights: string[];
 };
 
@@ -79,7 +123,29 @@ type CoachReport = {
   visuals: Array<{ label: string; value: number; hint: string }>;
 };
 
+type ChessPlatform = "lichess" | "chesscom";
+
 const WINDOW_OPTIONS = [1, 2, 3, 4, 5, 10, 20, 30, 50];
+const CHESS_USERS: Record<ChessPlatform, string> = {
+  lichess: "zaibao1",
+  chesscom: "zaibao1",
+};
+const CHESS_PLATFORM_LABEL: Record<ChessPlatform, string> = {
+  lichess: "Lichess",
+  chesscom: "Chess.com",
+};
+
+const EMPTY_MOVE_SIGNAL_COUNTS: MoveSignalCounts = {
+  brilliants: 0,
+  bestMoves: 0,
+  excellentMoves: 0,
+  goodMoves: 0,
+  bookMoves: 0,
+  inaccuracies: 0,
+  mistakes: 0,
+  blunders: 0,
+  missedWins: 0,
+};
 
 function HoverHelp({ text }: { text: string }) {
   return (
@@ -123,14 +189,71 @@ function openingMoveHint(label: string) {
   return "Mixed opening family from your games.";
 }
 
+function hasLichessSignalTags(text: string) {
+  return /(?:\?\?|\?!|!!|!\?|\$1|\$2|\$3|\$4|\$6)(?=\s|$)/.test(text);
+}
+
+function hasLichessAnalysisData(text: string) {
+  return /\[%eval\s+[^\]\s]+\]/.test(text) || hasLichessSignalTags(text);
+}
+
 function parseEvalToken(token: string) {
   if (!token) return null;
-  if (token.startsWith("#")) {
-    if (token.startsWith("#-")) return -10;
-    return 10;
-  }
+  if (token.startsWith("#")) return token.startsWith("#-") ? -10 : 10;
   const n = Number.parseFloat(token);
   return Number.isFinite(n) ? n : null;
+}
+
+function countMovePlies(movesText: string) {
+  const normalized = movesText
+    .replace(/\{[^}]*\}/g, " ")
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\[%[^\]]+\]/g, " ")
+    .replace(/\d+\.(\.\.)?/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const tokens = normalized ? normalized.split(" ") : [];
+  return tokens.filter((token) => {
+    if (!token) return false;
+    if (token === "*" || token === "1-0" || token === "0-1" || token === "1/2-1/2") return false;
+    if (/^\$\d+$/.test(token)) return false;
+    if (/^(?:\?\?|\?|!!|!\?|\?!|!)$/.test(token)) return false;
+    return true;
+  }).length;
+}
+
+function parseTimeControlBaseMinutes(timeControl: string) {
+  const base = Number.parseInt(String(timeControl ?? "").split("+")[0] ?? "", 10);
+  if (!Number.isFinite(base) || base <= 0) return null;
+  return base / 60;
+}
+
+async function fetchChessComPgnDirect(username: string, maxGames = 220) {
+  const archivesRes = await fetch(
+    `https://api.chess.com/pub/player/${encodeURIComponent(username)}/games/archives`,
+    { headers: { Accept: "application/json" } }
+  );
+  if (!archivesRes.ok) throw new Error("archives");
+  const archivesData = await archivesRes.json();
+  const archiveUrls = Array.isArray(archivesData?.archives) ? archivesData.archives : [];
+  const urls = [...archiveUrls].reverse();
+  const chunks: string[] = [];
+
+  for (const url of urls) {
+    if (chunks.length >= maxGames) break;
+    const monthRes = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!monthRes.ok) continue;
+    const monthData = await monthRes.json();
+    const games = Array.isArray(monthData?.games) ? monthData.games : [];
+    for (const game of [...games].reverse()) {
+      const pgn = typeof game?.pgn === "string" ? game.pgn.trim() : "";
+      if (!pgn || !/\[Event\s+"/.test(pgn)) continue;
+      chunks.push(pgn);
+      if (chunks.length >= maxGames) break;
+    }
+  }
+
+  return chunks.join("\n\n");
 }
 
 function parseMoveQualityFromAnnotations(movesText: string) {
@@ -148,22 +271,29 @@ function parseMoveQualityFromAnnotations(movesText: string) {
   let whiteMistakes = 0;
   let whiteInaccuracies = 0;
   let whiteBrilliants = 0;
+  let whiteGoodMoves = 0;
   let blackBlunders = 0;
   let blackMistakes = 0;
   let blackInaccuracies = 0;
   let blackBrilliants = 0;
+  let blackGoodMoves = 0;
 
-  const add = (side: "white" | "black", kind: "blunder" | "mistake" | "inaccuracy" | "brilliant") => {
+  const add = (
+    side: "white" | "black",
+    kind: "blunder" | "mistake" | "inaccuracy" | "brilliant" | "good"
+  ) => {
     if (side === "white") {
       if (kind === "blunder") whiteBlunders += 1;
       if (kind === "mistake") whiteMistakes += 1;
       if (kind === "inaccuracy") whiteInaccuracies += 1;
       if (kind === "brilliant") whiteBrilliants += 1;
+      if (kind === "good") whiteGoodMoves += 1;
     } else {
       if (kind === "blunder") blackBlunders += 1;
       if (kind === "mistake") blackMistakes += 1;
       if (kind === "inaccuracy") blackInaccuracies += 1;
       if (kind === "brilliant") blackBrilliants += 1;
+      if (kind === "good") blackGoodMoves += 1;
     }
   };
 
@@ -173,6 +303,7 @@ function parseMoveQualityFromAnnotations(movesText: string) {
     else if (glyph === "?") add(side, "mistake");
     else if (glyph === "?!" || glyph === "!?") add(side, "inaccuracy");
     else if (glyph === "!!") add(side, "brilliant");
+    else if (glyph === "!") add(side, "good");
   };
 
   const applyNag = (side: "white" | "black" | null, nag: string) => {
@@ -182,6 +313,7 @@ function parseMoveQualityFromAnnotations(movesText: string) {
     else if (nag === "$2") add(side, "mistake");
     else if (nag === "$6") add(side, "inaccuracy");
     else if (nag === "$3") add(side, "brilliant");
+    else if (nag === "$1") add(side, "good");
   };
 
   let side: "white" | "black" = "white";
@@ -210,11 +342,21 @@ function parseMoveQualityFromAnnotations(movesText: string) {
     whiteBlunders,
     whiteMistakes,
     whiteInaccuracies,
+    whiteBestMoves: 0,
+    whiteExcellentMoves: 0,
+    whiteGoodMoves,
+    whiteBookMoves: 0,
     blackBlunders,
     blackMistakes,
     blackInaccuracies,
+    blackBestMoves: 0,
+    blackExcellentMoves: 0,
+    blackGoodMoves,
+    blackBookMoves: 0,
     whiteBrilliants,
     blackBrilliants,
+    whiteMissedWins: 0,
+    blackMissedWins: 0,
   };
 }
 
@@ -227,11 +369,21 @@ function parseMoveQualityFromEvals(movesText: string) {
   let whiteBlunders = 0;
   let whiteMistakes = 0;
   let whiteInaccuracies = 0;
+  const whiteBestMoves = 0;
+  const whiteExcellentMoves = 0;
+  const whiteGoodMoves = 0;
+  const whiteBookMoves = 0;
   let blackBlunders = 0;
   let blackMistakes = 0;
   let blackInaccuracies = 0;
-  let whiteBrilliants = 0;
-  let blackBrilliants = 0;
+  const blackBestMoves = 0;
+  const blackExcellentMoves = 0;
+  const blackGoodMoves = 0;
+  const blackBookMoves = 0;
+  const whiteBrilliants = 0;
+  const blackBrilliants = 0;
+  const whiteMissedWins = 0;
+  const blackMissedWins = 0;
 
   for (let i = 1; i < evals.length; i += 1) {
     const prev = evals[i - 1];
@@ -250,9 +402,6 @@ function parseMoveQualityFromEvals(movesText: string) {
     } else if (swing <= -0.5) {
       if (mover === "white") whiteInaccuracies += 1;
       else blackInaccuracies += 1;
-    } else if (swing >= 2.0) {
-      if (mover === "white") whiteBrilliants += 1;
-      else blackBrilliants += 1;
     }
   }
 
@@ -261,11 +410,21 @@ function parseMoveQualityFromEvals(movesText: string) {
     whiteBlunders,
     whiteMistakes,
     whiteInaccuracies,
+    whiteBestMoves,
+    whiteExcellentMoves,
+    whiteGoodMoves,
+    whiteBookMoves,
     blackBlunders,
     blackMistakes,
     blackInaccuracies,
+    blackBestMoves,
+    blackExcellentMoves,
+    blackGoodMoves,
+    blackBookMoves,
     whiteBrilliants,
     blackBrilliants,
+    whiteMissedWins,
+    blackMissedWins,
   };
 }
 
@@ -306,20 +465,16 @@ function parsePgnHeaders(pgnText: string): ParsedChessGame[] {
       .split(/\r?\n/)
       .filter((line) => !line.startsWith("["))
       .join(" ");
-    const evalQuality = parseMoveQualityFromEvals(movesText);
+    const plyCount = countMovePlies(movesText);
     const annotationQuality = parseMoveQualityFromAnnotations(movesText);
-    const annotationHasData =
-      annotationQuality.whiteBlunders +
-        annotationQuality.whiteMistakes +
-        annotationQuality.whiteInaccuracies +
-        annotationQuality.whiteBrilliants +
-        annotationQuality.blackBlunders +
-        annotationQuality.blackMistakes +
-        annotationQuality.blackInaccuracies +
-        annotationQuality.blackBrilliants >
-      0;
-    // Prefer Lichess-provided move labels when available to match site analysis counts.
-    const quality = annotationHasData ? annotationQuality : evalQuality.hasEvalData ? evalQuality : annotationQuality;
+    const evalQuality = parseMoveQualityFromEvals(movesText);
+    const hasExactSignals = hasLichessSignalTags(movesText);
+    const signalSource: SignalQualitySource = hasExactSignals
+      ? "exact"
+      : evalQuality.hasEvalData
+        ? "estimated"
+        : "none";
+    const quality = hasExactSignals ? annotationQuality : evalQuality.hasEvalData ? evalQuality : annotationQuality;
 
     return {
       date: parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate : null,
@@ -331,15 +486,28 @@ function parsePgnHeaders(pgnText: string): ParsedChessGame[] {
       eco: headerValue(chunk, "ECO") || "Unknown",
       timeControl: headerValue(chunk, "TimeControl") || "Unknown",
       termination: headerValue(chunk, "Termination") || "Unknown",
+      plyCount,
       moveCount: (chunk.match(/\b\d+\.(?!\.)/g) ?? []).length,
+      annotationBestMoves: quality.whiteBestMoves,
+      annotationExcellentMoves: quality.whiteExcellentMoves,
+      annotationGoodMoves: quality.whiteGoodMoves,
+      annotationBookMoves: quality.whiteBookMoves,
       annotationBlunders: quality.whiteBlunders,
       annotationMistakes: quality.whiteMistakes,
       annotationInaccuracies: quality.whiteInaccuracies,
       annotationBrilliants: quality.whiteBrilliants,
+      annotationMissedWins: quality.whiteMissedWins,
+      blackBestMoves: quality.blackBestMoves,
+      blackExcellentMoves: quality.blackExcellentMoves,
+      blackGoodMoves: quality.blackGoodMoves,
+      blackBookMoves: quality.blackBookMoves,
       blackBlunders: quality.blackBlunders,
       blackMistakes: quality.blackMistakes,
       blackInaccuracies: quality.blackInaccuracies,
       blackBrilliants: quality.blackBrilliants,
+      blackMissedWins: quality.blackMissedWins,
+      whiteSignalSource: signalSource,
+      blackSignalSource: signalSource,
     };
   });
 }
@@ -381,11 +549,22 @@ function buildPlayerPerspective(games: ParsedChessGame[]) {
       eco: g.eco,
       timeControl: g.timeControl,
       termination: g.termination,
-      moveCount: g.moveCount,
+      moveCount:
+        g.plyCount > 0
+          ? isWhite
+            ? Math.ceil(g.plyCount / 2)
+            : Math.floor(g.plyCount / 2)
+          : g.moveCount,
+      annotationBestMoves: isWhite ? g.annotationBestMoves : g.blackBestMoves,
+      annotationExcellentMoves: isWhite ? g.annotationExcellentMoves : g.blackExcellentMoves,
+      annotationGoodMoves: isWhite ? g.annotationGoodMoves : g.blackGoodMoves,
+      annotationBookMoves: isWhite ? g.annotationBookMoves : g.blackBookMoves,
       annotationBlunders: isWhite ? g.annotationBlunders : g.blackBlunders,
       annotationMistakes: isWhite ? g.annotationMistakes : g.blackMistakes,
       annotationInaccuracies: isWhite ? g.annotationInaccuracies : g.blackInaccuracies,
       annotationBrilliants: isWhite ? g.annotationBrilliants : g.blackBrilliants,
+      annotationMissedWins: isWhite ? g.annotationMissedWins : g.blackMissedWins,
+      signalSource: isWhite ? g.whiteSignalSource : g.blackSignalSource,
     };
   });
 
@@ -411,17 +590,30 @@ function buildChessSummary(games: ParsedChessGame[]): ChessSummary | null {
   const openings = new Map<string, { games: number; wins: number }>();
   const openingTypes = new Map<string, { games: number; wins: number }>();
   const gameResults: Array<"W" | "D" | "L"> = [];
+  let totalBestMoves = 0;
+  let totalExcellentMoves = 0;
+  let totalGoodMoves = 0;
+  let totalBookMoves = 0;
   let totalBlunders = 0;
   let totalMistakes = 0;
   let totalInaccuracies = 0;
   let totalBrilliants = 0;
-  const signalRows: Array<{
-    game: string;
-    blunders: number;
-    mistakes: number;
-    inaccuracies: number;
-    brilliants: number;
-  }> = [];
+  let totalMissedWins = 0;
+  let totalMoves = 0;
+  let totalBaseMinutes = 0;
+  let baseMinutesGames = 0;
+  let winMovesSum = 0;
+  let drawMovesSum = 0;
+  let lossMovesSum = 0;
+  let winBaseMinutesSum = 0;
+  let lossBaseMinutesSum = 0;
+  let winMoveGames = 0;
+  let drawMoveGames = 0;
+  let lossMoveGames = 0;
+  let winBaseMinutesGames = 0;
+  let lossBaseMinutesGames = 0;
+  let timeForfeits = 0;
+  const signalRows: SignalRowWithSource[] = [];
 
   const toResult = (g: PlayerChessGame) => {
     if (g.myColor === "White") whiteGames += 1;
@@ -461,17 +653,54 @@ function buildChessSummary(games: ParsedChessGame[]): ChessSummary | null {
     typeRow.games += 1;
     if (g.myResult === "win") typeRow.wins += 1;
     openingTypes.set(typeLabel, typeRow);
-
+    totalBestMoves += g.annotationBestMoves;
+    totalExcellentMoves += g.annotationExcellentMoves;
+    totalGoodMoves += g.annotationGoodMoves;
+    totalBookMoves += g.annotationBookMoves;
     totalBlunders += g.annotationBlunders;
     totalMistakes += g.annotationMistakes;
     totalInaccuracies += g.annotationInaccuracies;
     totalBrilliants += g.annotationBrilliants;
+    totalMissedWins += g.annotationMissedWins;
+    totalMoves += g.moveCount;
+    const baseMinutes = parseTimeControlBaseMinutes(g.timeControl);
+    if (typeof baseMinutes === "number") {
+      totalBaseMinutes += baseMinutes;
+      baseMinutesGames += 1;
+    }
+    if (g.myResult === "win") {
+      winMovesSum += g.moveCount;
+      winMoveGames += 1;
+      if (typeof baseMinutes === "number") {
+        winBaseMinutesSum += baseMinutes;
+        winBaseMinutesGames += 1;
+      }
+    } else if (g.myResult === "draw") {
+      drawMovesSum += g.moveCount;
+      drawMoveGames += 1;
+    } else {
+      lossMovesSum += g.moveCount;
+      lossMoveGames += 1;
+      if (typeof baseMinutes === "number") {
+        lossBaseMinutesSum += baseMinutes;
+        lossBaseMinutesGames += 1;
+      }
+    }
+    if (/time forfeit/i.test(g.termination)) timeForfeits += 1;
     signalRows.push({
+      gameNumber: signalRows.length + 1,
       game: g.date ? g.date.toISOString().slice(0, 10) : `Game ${signalRows.length + 1}`,
+      myMoves: g.moveCount,
+      bestMoves: g.annotationBestMoves,
+      excellentMoves: g.annotationExcellentMoves,
+      goodMoves: g.annotationGoodMoves,
+      bookMoves: g.annotationBookMoves,
       blunders: g.annotationBlunders,
       mistakes: g.annotationMistakes,
       inaccuracies: g.annotationInaccuracies,
       brilliants: g.annotationBrilliants,
+      missedWins: g.annotationMissedWins,
+      source: g.signalSource,
     });
   };
 
@@ -495,12 +724,19 @@ function buildChessSummary(games: ParsedChessGame[]): ChessSummary | null {
     }))
     .sort((a, b) => b.games - a.games)
     .slice(0, 6);
-
   const totalGames = scoped.length;
   const whiteWinRate = whiteGames > 0 ? (whiteWins / whiteGames) * 100 : 0;
   const blackWinRate = blackGames > 0 ? (blackWins / blackGames) * 100 : 0;
   const avgOpponent = opponentCount > 0 ? Math.round(opponentSum / opponentCount) : null;
   const avgBlundersPerGame = totalGames > 0 ? totalBlunders / totalGames : 0;
+  const avgMovesPerGame = totalGames > 0 ? totalMoves / totalGames : 0;
+  const avgBaseMinutesPerGame = baseMinutesGames > 0 ? totalBaseMinutes / baseMinutesGames : null;
+  const avgBaseMinutesInWins = winBaseMinutesGames > 0 ? winBaseMinutesSum / winBaseMinutesGames : null;
+  const avgBaseMinutesInLosses = lossBaseMinutesGames > 0 ? lossBaseMinutesSum / lossBaseMinutesGames : null;
+  const avgMovesInWins = winMoveGames > 0 ? winMovesSum / winMoveGames : null;
+  const avgMovesInDraws = drawMoveGames > 0 ? drawMovesSum / drawMoveGames : null;
+  const avgMovesInLosses = lossMoveGames > 0 ? lossMovesSum / lossMoveGames : null;
+  const timeForfeitRate = totalGames > 0 ? (timeForfeits / totalGames) * 100 : 0;
 
   const recent = ratingSeries.slice(-15).map((r) => r.rating);
   const prior = ratingSeries.slice(-30, -15).map((r) => r.rating);
@@ -553,20 +789,32 @@ function buildChessSummary(games: ParsedChessGame[]): ChessSummary | null {
     openingTypeRows,
     gameResults,
     signalRows,
+    totalBestMoves,
+    totalExcellentMoves,
+    totalGoodMoves,
+    totalBookMoves,
     totalBlunders,
     totalMistakes,
     totalInaccuracies,
     totalBrilliants,
+    totalMissedWins,
     avgBlundersPerGame,
+    avgMovesPerGame,
+    avgBaseMinutesPerGame,
+    avgBaseMinutesInWins,
+    avgBaseMinutesInLosses,
+    avgMovesInWins,
+    avgMovesInDraws,
+    avgMovesInLosses,
+    timeForfeits,
+    timeForfeitRate,
     insights,
   };
 }
 
-function buildAiCoachReport(games: ParsedChessGame[], sampleSize: number): CoachReport | null {
-  const perspective = buildPlayerPerspective(games);
-  if (!perspective || perspective.games.length === 0) return null;
-
-  const recent = perspective.games.slice(-sampleSize);
+function buildAiCoachReport(recent: PlayerChessGame[]): CoachReport | null {
+  if (recent.length === 0) return null;
+  const sampleSize = recent.length;
   const losses = recent.filter((g) => g.myResult === "loss").length;
   const draws = recent.filter((g) => g.myResult === "draw").length;
   const wins = recent.filter((g) => g.myResult === "win").length;
@@ -834,38 +1082,41 @@ function MiniLineChart({ series }: { series: Array<{ label: string; rating: numb
   );
 }
 
-function MiniSignalsChart({
-  rows,
-}: {
-  rows: Array<{
-    game: string;
-    blunders: number;
-    mistakes: number;
-    inaccuracies: number;
-    brilliants: number;
-  }>;
-}) {
+function MiniSignalsChart({ rows }: { rows: SignalRow[] }) {
   if (rows.length === 0) {
     return <p className="text-sm text-white/55">No move-quality data available yet.</p>;
   }
 
   const totals = rows.reduce(
     (acc, row) => {
+      acc.bestMoves += row.bestMoves;
+      acc.excellentMoves += row.excellentMoves;
+      acc.goodMoves += row.goodMoves;
+      acc.bookMoves += row.bookMoves;
       acc.blunders += row.blunders;
       acc.mistakes += row.mistakes;
       acc.inaccuracies += row.inaccuracies;
       acc.brilliants += row.brilliants;
+      acc.missedWins += row.missedWins;
       return acc;
     },
-    { blunders: 0, mistakes: 0, inaccuracies: 0, brilliants: 0 }
+    { ...EMPTY_MOVE_SIGNAL_COUNTS }
   );
   const data = [
-    { label: "Blunders", value: totals.blunders, color: "rgba(251,113,133,0.92)" },
-    { label: "Mistakes", value: totals.mistakes, color: "rgba(251,191,36,0.92)" },
-    { label: "Inaccuracies", value: totals.inaccuracies, color: "rgba(96,165,250,0.92)" },
     { label: "Brilliants", value: totals.brilliants, color: "rgba(110,231,183,0.92)" },
-  ];
-  const width = 760;
+    { label: "Best", value: totals.bestMoves, color: "rgba(52,211,153,0.92)" },
+    { label: "Excellent", value: totals.excellentMoves, color: "rgba(125,211,252,0.92)" },
+    { label: "Good", value: totals.goodMoves, color: "rgba(250,204,21,0.92)" },
+    { label: "Book", value: totals.bookMoves, color: "rgba(167,139,250,0.92)" },
+    { label: "Inaccuracies", value: totals.inaccuracies, color: "rgba(96,165,250,0.92)" },
+    { label: "Mistakes", value: totals.mistakes, color: "rgba(251,191,36,0.92)" },
+    { label: "Blunders", value: totals.blunders, color: "rgba(251,113,133,0.92)" },
+    { label: "Missed Win", value: totals.missedWins, color: "rgba(248,113,113,0.92)" },
+  ].filter((item) => item.value > 0);
+  if (data.length === 0) {
+    return <p className="text-sm text-white/55">No signals in this window yet.</p>;
+  }
+  const width = 940;
   const height = 240;
   const pad = 16;
   const leftAxisPad = 48;
@@ -903,7 +1154,7 @@ function MiniSignalsChart({
                 x={xCenter - barWidth / 2}
                 y={y}
                 width={barWidth}
-                height={Math.max(2, h)}
+                height={h}
                 rx={6}
                 fill={item.color}
               />
@@ -950,17 +1201,7 @@ function MiniSignalsChart({
   );
 }
 
-function BlunderTrendChart({
-  rows,
-}: {
-  rows: Array<{
-    game: string;
-    blunders: number;
-    mistakes: number;
-    inaccuracies: number;
-    brilliants: number;
-  }>;
-}) {
+function BlunderTrendChart({ rows }: { rows: SignalRow[] }) {
   if (rows.length < 2) {
     return <p className="text-sm text-white/55">Need at least 2 games for a blunder trend.</p>;
   }
@@ -1039,10 +1280,15 @@ export default function HobbyDetail() {
   const [lastSyncedAt, setLastSyncedAt] = useState<string>("");
   const [syncSource, setSyncSource] = useState<string>("");
   const [analysisWindow, setAnalysisWindow] = useState<number>(1);
+  const [analysisViewMode, setAnalysisViewMode] = useState<"window" | "game">("window");
+  const [selectedAnalysisGame, setSelectedAnalysisGame] = useState<number>(-1);
   const [signalsWindow, setSignalsWindow] = useState<number>(1);
+  const [signalsViewMode, setSignalsViewMode] = useState<"window" | "game">("game");
+  const [selectedSignalGame, setSelectedSignalGame] = useState<number>(-1);
+  const [chessPlatform, setChessPlatform] = useState<ChessPlatform>("lichess");
   const [coachReport, setCoachReport] = useState<CoachReport | null>(null);
   const [ratingWindow, setRatingWindow] = useState<number>(60);
-  const lichessUsername = "zaibao1";
+  const platformUsername = CHESS_USERS[chessPlatform];
   const isLocalDev =
     typeof window !== "undefined" &&
     (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
@@ -1062,33 +1308,33 @@ export default function HobbyDetail() {
     setPgnError("");
     setCoachReport(null);
 
-    const username = lichessUsername;
-    const snapshotUrl = `/api/chess-sync?username=${encodeURIComponent(username)}&max=220`;
-    const directUrl = `https://lichess.org/api/games/user/${encodeURIComponent(
+    const username = platformUsername;
+    const snapshotUrl = `/api/chess-sync?platform=${chessPlatform}&username=${encodeURIComponent(username)}&max=220`;
+    const directLichessUrl = `https://lichess.org/api/games/user/${encodeURIComponent(
       username
-    )}?max=220&opening=true&moves=true&evals=true&pgnInJson=false&format=pgn`;
+    )}?max=220&opening=true&moves=true&evals=true&analysed=true&pgnInJson=false&format=pgn`;
 
     try {
       if (isLocalDev) {
-        const directRes = await fetch(directUrl, {
-          headers: { Accept: "application/x-chess-pgn,text/plain;q=0.9,*/*;q=0.8" },
-        });
-        if (!directRes.ok) {
-          setPgnError("Live sync failed in local dev. Lichess request returned an error.");
-          setPgnText("");
-          setPgnLoading(false);
-          return;
-        }
-        const directText = await directRes.text();
+        const directText =
+          chessPlatform === "lichess"
+            ? await (async () => {
+                const directRes = await fetch(directLichessUrl, {
+                  headers: { Accept: "application/x-chess-pgn,text/plain;q=0.9,*/*;q=0.8" },
+                });
+                if (!directRes.ok) throw new Error("lichess");
+                return directRes.text();
+              })()
+            : await fetchChessComPgnDirect(username, 220);
         if (!directText.trim() || !isValidPgn(directText)) {
-          setPgnError("Live sync failed in local dev. No valid PGN returned.");
+          setPgnError(`Live sync failed in local dev. No valid ${CHESS_PLATFORM_LABEL[chessPlatform]} PGN returned.`);
           setPgnText("");
           setPgnLoading(false);
           return;
         }
         setPgnText(directText);
         setLastSyncedAt(new Date().toLocaleTimeString());
-        setSyncSource(`Direct Lichess (${username})`);
+        setSyncSource(`Direct ${CHESS_PLATFORM_LABEL[chessPlatform]} (${username})`);
         setPgnLoading(false);
         return;
       }
@@ -1104,35 +1350,33 @@ export default function HobbyDetail() {
               ? new Date(data.syncedAt).toLocaleTimeString()
               : new Date().toLocaleTimeString()
           );
-          setSyncSource(`Supabase snapshot (${username})`);
+          setSyncSource(`Supabase snapshot (${CHESS_PLATFORM_LABEL[chessPlatform]} · ${username})`);
           setPgnLoading(false);
           return;
         }
       }
 
-      // Local dev fallback: direct Lichess fetch (not persisted).
-      const directRes = await fetch(directUrl, {
-        headers: { Accept: "application/x-chess-pgn,text/plain;q=0.9,*/*;q=0.8" },
-      });
-      if (!directRes.ok) {
-        setPgnError("Live sync failed. API route and direct Lichess request both failed.");
-        setPgnText("");
-        setPgnLoading(false);
-        return;
-      }
-      const directText = await directRes.text();
+      const directText =
+        chessPlatform === "lichess"
+          ? await (async () => {
+              const directRes = await fetch(directLichessUrl, {
+                headers: { Accept: "application/x-chess-pgn,text/plain;q=0.9,*/*;q=0.8" },
+              });
+              if (!directRes.ok) throw new Error("lichess");
+              return directRes.text();
+            })()
+          : await fetchChessComPgnDirect(username, 220);
       if (!directText.trim() || !isValidPgn(directText)) {
-        setPgnError("Live sync failed. No valid PGN returned.");
+        setPgnError(`Live sync failed. No valid ${CHESS_PLATFORM_LABEL[chessPlatform]} PGN returned.`);
         setPgnText("");
         setPgnLoading(false);
         return;
       }
-
       setPgnText(directText);
       setLastSyncedAt(new Date().toLocaleTimeString());
-      setSyncSource(`Direct Lichess (${username})`);
+      setSyncSource(`Direct ${CHESS_PLATFORM_LABEL[chessPlatform]} (${username})`);
     } catch {
-      setPgnError("Live sync failed. Unable to reach API/Lichess from this environment.");
+      setPgnError(`Live sync failed. Unable to reach API/${CHESS_PLATFORM_LABEL[chessPlatform]} from this environment.`);
       setPgnText("");
     }
 
@@ -1141,16 +1385,19 @@ export default function HobbyDetail() {
 
   useEffect(() => {
     if (!isChess) return;
-    const username = lichessUsername;
+    const username = platformUsername;
     const loadSnapshot = async () => {
       if (isLocalDev) {
         await syncChessData();
         return;
       }
       try {
-        const res = await fetch(`/api/chess-data?username=${encodeURIComponent(username)}`, {
+        const res = await fetch(
+          `/api/chess-data?platform=${chessPlatform}&username=${encodeURIComponent(username)}`,
+          {
           headers: { Accept: "application/json" },
-        });
+          }
+        );
         if (!res.ok) {
           await syncChessData();
           return;
@@ -1160,7 +1407,7 @@ export default function HobbyDetail() {
           await syncChessData();
           return;
         }
-        if (!/\[%eval\s+[^\]\s]+\]/.test(data.pgn)) {
+        if (chessPlatform === "lichess" && !hasLichessAnalysisData(data.pgn)) {
           await syncChessData();
           return;
         }
@@ -1168,7 +1415,7 @@ export default function HobbyDetail() {
         setLastSyncedAt(
           data.syncedAt ? new Date(data.syncedAt).toLocaleTimeString() : new Date().toLocaleTimeString()
         );
-        setSyncSource(`Supabase snapshot (${username})`);
+        setSyncSource(`Supabase snapshot (${CHESS_PLATFORM_LABEL[chessPlatform]} · ${username})`);
       } catch {
         await syncChessData();
       }
@@ -1176,7 +1423,7 @@ export default function HobbyDetail() {
     void loadSnapshot();
     // Initial chess data load should run on page entry; manual sync button handles updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isChess, isLocalDev]);
+  }, [isChess, isLocalDev, chessPlatform, platformUsername]);
 
   const parsedChessGames = useMemo(
     () => (isChess && pgnText ? parsePgnHeaders(pgnText) : []),
@@ -1187,6 +1434,7 @@ export default function HobbyDetail() {
     () => (parsedChessGames.length > 0 ? buildChessSummary(parsedChessGames) : null),
     [parsedChessGames]
   );
+  const coachPerspective = useMemo(() => buildPlayerPerspective(parsedChessGames), [parsedChessGames]);
   const ratingSeriesWindow = useMemo(() => {
     if (!chessSummary) return [];
     const total = chessSummary.ratingSeries.length;
@@ -1199,31 +1447,115 @@ export default function HobbyDetail() {
     if (signalsWindow >= total) return chessSummary.signalRows;
     return chessSummary.signalRows.slice(-signalsWindow);
   }, [chessSummary, signalsWindow]);
+  const signalRowsGame = useMemo(() => {
+    if (!chessSummary) return [];
+    const row = chessSummary.signalRows.find((r) => r.gameNumber === selectedSignalGame);
+    return row ? [row] : [];
+  }, [chessSummary, selectedSignalGame]);
+  const selectedGameRow = useMemo(() => {
+    if (!chessSummary || chessSummary.signalRows.length === 0) return null;
+    return (
+      chessSummary.signalRows.find((r) => r.gameNumber === selectedSignalGame) ??
+      chessSummary.signalRows[chessSummary.signalRows.length - 1]
+    );
+  }, [chessSummary, selectedSignalGame]);
+  const activeSignalRows = signalsViewMode === "game" ? signalRowsGame : signalRowsWindow;
   const trendRowsWindow = useMemo(() => {
     if (!chessSummary) return [];
     return chessSummary.signalRows;
   }, [chessSummary]);
+  const latestSignalRow = activeSignalRows[activeSignalRows.length - 1] ?? null;
+  const signalsSourceBadge = useMemo(() => {
+    if (activeSignalRows.length === 0) return "No Data";
+    const exactCount = activeSignalRows.filter((row) => row.source === "exact").length;
+    const estimatedCount = activeSignalRows.filter((row) => row.source === "estimated").length;
+    if (exactCount === activeSignalRows.length) return "Exact (Lichess Labels)";
+    if (estimatedCount === activeSignalRows.length) return "Estimated (Lichess Evals)";
+    if (exactCount === 0 && estimatedCount === 0) return "No Data";
+    return `Mixed (${exactCount} exact / ${estimatedCount} estimated)`;
+  }, [activeSignalRows]);
   const hasSignalSourceData = useMemo(
     () =>
-      /\[%eval\s+[^\]\s]+\]/.test(pgnText) ||
-      /(?:\?\?|\?!|!!|\$2|\$3|\$4|\$6)(?=\s|$)/.test(pgnText),
-    [pgnText]
+      parsedChessGames.some(
+        (g) =>
+          g.annotationBlunders +
+            g.annotationMistakes +
+            g.annotationInaccuracies +
+            g.annotationBrilliants +
+            g.annotationBestMoves +
+            g.annotationExcellentMoves +
+            g.annotationGoodMoves +
+            g.annotationBookMoves +
+            g.annotationMissedWins +
+            g.blackBlunders +
+            g.blackMistakes +
+            g.blackInaccuracies +
+            g.blackBrilliants +
+            g.blackBestMoves +
+            g.blackExcellentMoves +
+            g.blackGoodMoves +
+            g.blackBookMoves +
+            g.blackMissedWins >
+          0
+      ),
+    [parsedChessGames]
   );
-  const effectiveAnalysisWindow = useMemo(() => {
-    const total = parsedChessGames.length;
+  const effectiveAnalysisWindowFromPerspective = useMemo(() => {
+    const total = coachPerspective?.games.length ?? 0;
     if (total === 0) return 1;
     if (analysisWindow === -1) return total;
     return Math.max(1, Math.min(analysisWindow, total));
-  }, [analysisWindow, parsedChessGames.length]);
+  }, [analysisWindow, coachPerspective]);
+  const analysisGamesForCoach = useMemo(() => {
+    const games = coachPerspective?.games ?? [];
+    if (games.length === 0) return [];
+    if (analysisViewMode === "game") {
+      const game = games[selectedAnalysisGame - 1];
+      return game ? [game] : [games[games.length - 1]];
+    }
+    if (analysisWindow === -1) return games;
+    return games.slice(-effectiveAnalysisWindowFromPerspective);
+  }, [analysisViewMode, analysisWindow, coachPerspective, effectiveAnalysisWindowFromPerspective, selectedAnalysisGame]);
+  const signalCards: Array<{ label: string; field: keyof MoveSignalCounts }> = [
+    { label: "Brilliant", field: "brilliants" },
+    { label: "Best", field: "bestMoves" },
+    { label: "Excellent", field: "excellentMoves" },
+    { label: "Good", field: "goodMoves" },
+    { label: "Book", field: "bookMoves" },
+    { label: "Inaccuracy", field: "inaccuracies" },
+    { label: "Mistake", field: "mistakes" },
+    { label: "Blunder", field: "blunders" },
+    { label: "Missed Win", field: "missedWins" },
+  ];
+  const visibleSignalCards = useMemo(
+    () => signalCards.filter((metric) => (latestSignalRow?.[metric.field] ?? 0) > 0),
+    [latestSignalRow]
+  );
+  useEffect(() => {
+    if (!chessSummary || chessSummary.signalRows.length === 0) return;
+    const latestGameNumber = chessSummary.signalRows[chessSummary.signalRows.length - 1].gameNumber;
+    const hasSelected = chessSummary.signalRows.some((row) => row.gameNumber === selectedSignalGame);
+    if (selectedSignalGame < 0 || !hasSelected) {
+      setSelectedSignalGame(latestGameNumber);
+    }
+  }, [chessSummary, selectedSignalGame]);
+  useEffect(() => {
+    const games = coachPerspective?.games ?? [];
+    if (games.length === 0) return;
+    const latestGameNumber = games.length;
+    if (selectedAnalysisGame < 0 || selectedAnalysisGame > games.length) {
+      setSelectedAnalysisGame(latestGameNumber);
+    }
+  }, [coachPerspective, selectedAnalysisGame]);
 
   useEffect(() => {
-    if (!isChess || parsedChessGames.length === 0) {
+    if (!isChess || analysisGamesForCoach.length === 0) {
       setCoachReport(null);
       return;
     }
-    const report = buildAiCoachReport(parsedChessGames, effectiveAnalysisWindow);
+    const report = buildAiCoachReport(analysisGamesForCoach);
     setCoachReport(report);
-  }, [effectiveAnalysisWindow, isChess, parsedChessGames]);
+  }, [analysisGamesForCoach, isChess]);
 
   if (!hobby) {
     return (
@@ -1304,7 +1636,22 @@ export default function HobbyDetail() {
             <div>
             <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
               <h2 className="section-title">Dashboards</h2>
-              <div />
+              <div className="inline-flex rounded-lg border border-white/15 bg-[#0b1320] p-1">
+                {(["lichess", "chesscom"] as ChessPlatform[]).map((platform) => (
+                  <button
+                    key={platform}
+                    type="button"
+                    onClick={() => setChessPlatform(platform)}
+                    className={`rounded-md px-3 py-1.5 text-sm transition ${
+                      chessPlatform === platform
+                        ? "bg-cyan-300/20 text-cyan-100 border border-cyan-300/35"
+                        : "text-white/70 hover:bg-white/8"
+                    }`}
+                  >
+                    {CHESS_PLATFORM_LABEL[platform]}
+                  </button>
+                ))}
+              </div>
             </div>
             {lastSyncedAt ? (
               <p className="text-xs text-white/50 -mt-1 mb-3">
@@ -1319,20 +1666,10 @@ export default function HobbyDetail() {
             {pgnError ? <p className="text-red-300/85">{pgnError}</p> : null}
             {!pgnLoading && chessSummary ? (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                  <article className="showcase-inner-card">
-                    <p className="text-xs uppercase tracking-wider text-white/60">Player</p>
-                    <p className="text-lg font-semibold mt-1">{chessSummary.player}</p>
-                  </article>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <article className="showcase-inner-card">
                     <p className="text-xs uppercase tracking-wider text-white/60">Games</p>
                     <p className="text-lg font-semibold mt-1">{chessSummary.totalGames}</p>
-                  </article>
-                  <article className="showcase-inner-card">
-                    <p className="text-xs uppercase tracking-wider text-white/60">W-D-L</p>
-                    <p className="text-lg font-semibold mt-1">
-                      {chessSummary.wins}-{chessSummary.draws}-{chessSummary.losses}
-                    </p>
                   </article>
                   <article className="showcase-inner-card">
                     <p className="text-xs uppercase tracking-wider text-white/60">White/Black Win %</p>
@@ -1345,6 +1682,20 @@ export default function HobbyDetail() {
                     <p className="text-lg font-semibold mt-1">
                       {chessSummary.avgOpponent ?? "-"}
                     </p>
+                  </article>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <article className="showcase-inner-card">
+                    <p className="text-xs uppercase tracking-wider text-white/60">Wins</p>
+                    <p className="text-lg font-semibold mt-1 text-emerald-100">{chessSummary.wins}</p>
+                  </article>
+                  <article className="showcase-inner-card">
+                    <p className="text-xs uppercase tracking-wider text-white/60">Draws</p>
+                    <p className="text-lg font-semibold mt-1 text-slate-100">{chessSummary.draws}</p>
+                  </article>
+                  <article className="showcase-inner-card">
+                    <p className="text-xs uppercase tracking-wider text-white/60">Losses</p>
+                    <p className="text-lg font-semibold mt-1 text-rose-100">{chessSummary.losses}</p>
                   </article>
                 </div>
 
@@ -1406,7 +1757,7 @@ export default function HobbyDetail() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <article className="showcase-inner-card">
+                  <article className="showcase-inner-card flex flex-col">
                     <p className="text-sm uppercase tracking-wider text-white/60 mb-2 inline-flex items-center gap-2">
                       Results
                       <HoverHelp text="Complete game result history. Newest game appears at the top." />
@@ -1446,7 +1797,7 @@ export default function HobbyDetail() {
                       Openings Used
                       <HoverHelp text="Opening families inferred from ECO codes to show what you're using most often." />
                     </p>
-                    <div className="space-y-2">
+                    <div className="space-y-2 flex-1">
                       {chessSummary.openingTypeRows.length > 0 ? (
                         chessSummary.openingTypeRows.map((row) => (
                           <div key={row.label}>
@@ -1469,6 +1820,25 @@ export default function HobbyDetail() {
                         <p className="text-white/55 text-sm">No opening usage data yet.</p>
                       )}
                     </div>
+                    <div className="mt-3 space-y-2.5">
+                      <div className="rounded-lg border border-cyan-300/25 bg-cyan-300/10 px-4 py-3.5 min-h-24">
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-100/75">
+                          {selectedGameRow ? `Your Moves (Game ${selectedGameRow.gameNumber})` : "Your Moves"}
+                        </p>
+                        <p className="text-2xl leading-tight font-semibold text-cyan-50 mt-1">
+                          {selectedGameRow ? selectedGameRow.myMoves : "-"}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-rose-300/25 bg-rose-300/10 px-4 py-3.5 min-h-24">
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-rose-100/75">Time Forfeits</p>
+                        <p className="text-2xl leading-tight font-semibold text-rose-50 mt-1">
+                          {chessSummary.timeForfeits}
+                        </p>
+                        <p className="text-xs text-rose-100/85 mt-0.5">
+                          {chessSummary.timeForfeitRate.toFixed(0)}% of games
+                        </p>
+                      </div>
+                    </div>
                   </article>
                 </div>
 
@@ -1476,63 +1846,83 @@ export default function HobbyDetail() {
                   <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                     <p className="text-sm uppercase tracking-wider text-white/60 inline-flex items-center gap-2">
                       Signals
-                      <HoverHelp text="Calculated from Lichess engine eval swings per move (free source), not static PGN annotation tags." />
+                      <HoverHelp text="Uses platform-provided labels when present; falls back to eval tags when available. Badge shows Exact vs Estimated." />
                     </p>
-                    <select
-                      value={signalsWindow}
-                      onChange={(e) => setSignalsWindow(Number(e.target.value))}
-                      className="rounded-lg border border-white/15 bg-[#0b1320] px-2.5 py-1.5 text-sm text-white/85"
-                    >
-                      {WINDOW_OPTIONS.map((n) => (
-                        <option key={n} value={n}>
-                          {n === 1 ? "Most Recent Game" : `Last ${n} Games`}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={signalsViewMode}
+                        onChange={(e) => setSignalsViewMode(e.target.value as "window" | "game")}
+                        className="rounded-lg border border-white/15 bg-[#0b1320] px-2.5 py-1.5 text-sm text-white/85"
+                      >
+                        <option value="window">Totals</option>
+                        <option value="game">Single Game</option>
+                      </select>
+                      {signalsViewMode === "game" ? (
+                        <select
+                          value={selectedSignalGame}
+                          onChange={(e) => setSelectedSignalGame(Number(e.target.value))}
+                          className="rounded-lg border border-white/15 bg-[#0b1320] px-2.5 py-1.5 text-sm text-white/85"
+                        >
+                          {[...chessSummary.signalRows]
+                            .sort((a, b) => b.gameNumber - a.gameNumber)
+                            .map((row) => (
+                            <option key={`signal-game-${row.gameNumber}`} value={row.gameNumber}>
+                              {`Game ${row.gameNumber} (${row.game})`}
+                            </option>
+                            ))}
+                        </select>
+                      ) : null}
+                      <span className="rounded-lg border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-white/70">
+                        {signalsSourceBadge}
+                      </span>
+                      {signalsViewMode === "window" ? (
+                        <select
+                          value={signalsWindow}
+                          onChange={(e) => setSignalsWindow(Number(e.target.value))}
+                          className="rounded-lg border border-white/15 bg-[#0b1320] px-2.5 py-1.5 text-sm text-white/85"
+                        >
+                          {WINDOW_OPTIONS.map((n) => (
+                            <option key={n} value={n}>
+                              {n === 1 ? "Most Recent Game" : `Last ${n} Games`}
+                            </option>
+                          ))}
+                        </select>
+                      ) : null}
+                    </div>
                   </div>
                   {!hasSignalSourceData ? (
                     <p className="mb-3 text-xs text-amber-200/85">
-                      No eval/annotation tags found in current PGN snapshot. Signal metrics may show 0 until analyzed games are synced.
+                      No analysis signal tags found in the current snapshot yet. Signals populate from labels first, then eval tags.
                     </p>
                   ) : null}
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
-                    <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm">
-                      <p className="text-[11px] uppercase tracking-wider text-white/55">Blunders</p>
-                      <p className="text-white/90 font-semibold">
-                        {signalRowsWindow[signalRowsWindow.length - 1]?.blunders ?? 0}
-                      </p>
-                    </div>
-                    <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm">
-                      <p className="text-[11px] uppercase tracking-wider text-white/55">Mistakes</p>
-                      <p className="text-white/90 font-semibold">
-                        {signalRowsWindow[signalRowsWindow.length - 1]?.mistakes ?? 0}
-                      </p>
-                    </div>
-                    <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm">
-                      <p className="text-[11px] uppercase tracking-wider text-white/55">Inaccuracies</p>
-                      <p className="text-white/90 font-semibold">
-                        {signalRowsWindow[signalRowsWindow.length - 1]?.inaccuracies ?? 0}
-                      </p>
-                    </div>
-                    <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm">
-                      <p className="text-[11px] uppercase tracking-wider text-white/55">Brilliants</p>
-                      <p className="text-white/90 font-semibold">
-                        {signalRowsWindow[signalRowsWindow.length - 1]?.brilliants ?? 0}
-                      </p>
-                    </div>
-                    <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm">
+                  <div className="mb-3 flex flex-wrap justify-center gap-2">
+                    {visibleSignalCards.map((metric) => (
+                      <div
+                        key={metric.field}
+                        className="w-[10.5rem] rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                      >
+                        <p className="text-[11px] uppercase tracking-wider text-white/55">{metric.label}</p>
+                        <p className="text-white/90 font-semibold">{latestSignalRow?.[metric.field] ?? 0}</p>
+                      </div>
+                    ))}
+                    {visibleSignalCards.length === 0 ? (
+                      <div className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/65">
+                        No signals detected for the latest game in this window.
+                      </div>
+                    ) : null}
+                    <div className="w-[10.5rem] rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm">
                       <p className="text-[11px] uppercase tracking-wider text-white/55">Avg Blunders / Game</p>
                       <p className="text-white/90 font-semibold">
-                        {signalRowsWindow.length > 0
+                        {activeSignalRows.length > 0
                           ? (
-                              signalRowsWindow.reduce((sum, row) => sum + row.blunders, 0) /
-                              signalRowsWindow.length
+                              activeSignalRows.reduce((sum, row) => sum + row.blunders, 0) /
+                              activeSignalRows.length
                             ).toFixed(2)
                           : "0.00"}
                       </p>
                     </div>
                   </div>
-                  <MiniSignalsChart rows={signalRowsWindow} />
+                  <MiniSignalsChart rows={activeSignalRows} />
                 </article>
 
                 <article className="showcase-inner-card">
@@ -1556,18 +1946,46 @@ export default function HobbyDetail() {
                     </p>
                     <div className="flex items-center gap-2">
                       <select
-                        value={analysisWindow}
-                        onChange={(e) => setAnalysisWindow(Number(e.target.value))}
+                        value={analysisViewMode}
+                        onChange={(e) => setAnalysisViewMode(e.target.value as "window" | "game")}
                         className="rounded-lg border border-white/15 bg-[#0b1320] px-2.5 py-1.5 text-sm text-white/85"
                       >
-                        <option value={1}>Most Recent Game</option>
-                        {WINDOW_OPTIONS.filter((n) => n > 1).map((n) => (
-                          <option key={`coach-window-${n}`} value={n}>
-                            {`Last ${n} Games`}
-                          </option>
-                        ))}
-                        <option value={-1}>All Games</option>
+                        <option value="window">Totals</option>
+                        <option value="game">Single Game</option>
                       </select>
+                      {analysisViewMode === "game" ? (
+                        <select
+                          value={selectedAnalysisGame}
+                          onChange={(e) => setSelectedAnalysisGame(Number(e.target.value))}
+                          className="rounded-lg border border-white/15 bg-[#0b1320] px-2.5 py-1.5 text-sm text-white/85"
+                        >
+                          {(coachPerspective?.games ?? [])
+                            .map((g, i) => ({
+                              gameNumber: i + 1,
+                              game: g.date ? g.date.toISOString().slice(0, 10) : `Game ${i + 1}`,
+                            }))
+                            .reverse()
+                            .map((row) => (
+                              <option key={`coach-game-${row.gameNumber}`} value={row.gameNumber}>
+                                {`Game ${row.gameNumber} (${row.game})`}
+                              </option>
+                            ))}
+                        </select>
+                      ) : (
+                        <select
+                          value={analysisWindow}
+                          onChange={(e) => setAnalysisWindow(Number(e.target.value))}
+                          className="rounded-lg border border-white/15 bg-[#0b1320] px-2.5 py-1.5 text-sm text-white/85"
+                        >
+                          <option value={1}>Most Recent Game</option>
+                          {WINDOW_OPTIONS.filter((n) => n > 1).map((n) => (
+                            <option key={`coach-window-${n}`} value={n}>
+                              {`Last ${n} Games`}
+                            </option>
+                          ))}
+                          <option value={-1}>All Games</option>
+                        </select>
+                      )}
                     </div>
                   </div>
                   {coachReport ? (
