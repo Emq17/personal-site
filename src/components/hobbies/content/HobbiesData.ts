@@ -16,7 +16,7 @@ export const hobbies: Hobby[] = [
     summary:
       "Strategic thinking and pattern recognition under pressure. Chess sharpens decision-making and long-range planning. I use it to practice discipline, controlled risk-taking, and staying calm in dynamic positions.",
     description: "",
-    tags: [],
+    tags: ["Strategy", "Tactics", "Calculations"],
     stats: [
       { label: "Focus", value: "Rapid + Tactics" },
       { label: "Tracking", value: "Online profile metrics" },

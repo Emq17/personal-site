@@ -138,7 +138,7 @@ export default function Showcase() {
               href="https://github.com/Emq17"
               target="_blank"
               rel="noopener noreferrer"
-              className="showcase-cta-primary self-center sm:self-auto"
+              className="showcase-cta-primary self-center sm:self-auto mb-2 sm:mb-0"
             >
               View My GitHub Projects
             </a>
@@ -235,9 +235,14 @@ export default function Showcase() {
         <section id="languages" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28 text-center md:text-left">
           <p className="section-kicker">Communication</p>
           <h2 className="section-title">Languages</h2>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {["English", "Tagalog", "Spanish", "Japanese", "Korean"].map((language) => (
-              <span key={language} className="showcase-chip">
+          <div className="mt-4 grid grid-cols-6 gap-2 justify-items-center md:flex md:flex-wrap md:gap-2">
+            {["English", "Tagalog", "Spanish", "Japanese", "Korean"].map((language, idx) => (
+              <span
+                key={language}
+                className={`showcase-chip col-span-2 ${
+                  idx === 3 ? "col-start-2" : idx === 4 ? "col-start-4" : ""
+                } md:col-auto md:col-start-auto`}
+              >
                 {language}
               </span>
             ))}
@@ -285,7 +290,7 @@ export default function Showcase() {
               >
                 <p className="text-white/95 font-semibold whitespace-pre-line">{item.program}</p>
                 <p className="text-white/65 mt-1">{item.institution}</p>
-                <div className="mt-3 flex gap-2 flex-wrap">
+                <div className="mt-3 flex gap-2 flex-wrap justify-center md:justify-start">
                   <span className="showcase-chip">{item.status}</span>
                   {item.timeframe ? <span className="showcase-chip">{item.timeframe}</span> : null}
                 </div>
@@ -356,7 +361,7 @@ export default function Showcase() {
               >
                 <p className="text-lg font-semibold">{hobby.title}</p>
                 <p className="text-white/65 text-sm mt-1">{hobby.summary}</p>
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-wrap gap-2 justify-center md:justify-start">
                   {hobby.tags.map((tag) => (
                     <span key={`${hobby.title}-${tag}`} className="showcase-chip">
                       {tag}
@@ -365,7 +370,7 @@ export default function Showcase() {
                 </div>
                 <p className="mt-4 inline-flex items-center gap-1.5 text-sm tracking-wide text-cyan-200/85 transition-all duration-200 group-hover:text-cyan-100 group-hover:translate-x-0.5">
                   {hobby.slug === "chess"
-                    ? "View my dashboards"
+                    ? "Dashboards, AI Coach, & Statistics"
                     : hobby.slug === "music"
                       ? "Watch me play"
                     : "Open details"}
@@ -393,19 +398,19 @@ export default function Showcase() {
         </section>
 
         <section id="contact" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28 text-center md:text-left">
-          <p className="section-kicker">Connect</p>
+          <p className="section-kicker">Get in touch</p>
           <h2 className="section-title">Contact</h2>
           <p className="text-white/70">Reach out for collaborations, opportunities, or a quick intro.</p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-5">
-            <a href="mailto:emmetteq17@gmail.com" className="showcase-contact-link">
+            <a href="mailto:emmetteq17@gmail.com" className="showcase-contact-link justify-center">
               <FaEnvelope /> <span>Email</span>
             </a>
             <a
               href="https://linkedin.com/in/emmetteq"
               target="_blank"
               rel="noopener noreferrer"
-              className="showcase-contact-link"
+              className="showcase-contact-link justify-center"
             >
               <FaLinkedin /> <span>LinkedIn</span>
             </a>
@@ -413,7 +418,7 @@ export default function Showcase() {
               href="https://github.com/Emq17"
               target="_blank"
               rel="noopener noreferrer"
-              className="showcase-contact-link"
+              className="showcase-contact-link justify-center"
             >
               <FaGithub /> <span>GitHub</span>
             </a>
@@ -424,41 +429,41 @@ export default function Showcase() {
           <p className="section-kicker">Build Notes</p>
           <h2 className="section-title">How This Site Was Built</h2>
           <p className="text-white/70 max-w-4xl">
-            This is a single-page portfolio built to be easy to scan, easy to maintain, and flexible to
-            grow over time with new projects, experience, and hobby dashboards.
+            This portfolio is a React + TypeScript application with a data pipeline for chess analytics.
+            It combines live API pulls, persisted snapshots, and a coach layer that turns game data into
+            actionable feedback.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
             <article className="showcase-inner-card">
-              <p className="text-white/95 font-semibold">Project Objective</p>
+              <p className="text-white/95 font-semibold">Frontend + Routing</p>
               <ul className="mt-2 text-sm text-white/75 list-disc list-inside space-y-1">
-                <li>Combine work and personal sections in one cohesive flow.</li>
-                <li>Keep content clear enough for quick review and deep enough for technical evaluation.</li>
-                <li>Use a structure that can be updated continuously.</li>
+                <li>Built with React, TypeScript, Vite, and React Router.</li>
+                <li>Section-based SPA for core content plus dynamic hobby subpages.</li>
+                <li>Reusable components and typed models for maintainability.</li>
               </ul>
             </article>
             <article className="showcase-inner-card">
-              <p className="text-white/95 font-semibold">Technical Stack</p>
+              <p className="text-white/95 font-semibold">API Integration Layer</p>
               <ul className="mt-2 text-sm text-white/75 list-disc list-inside space-y-1">
-                <li>Frontend: React + TypeScript</li>
-                <li>Build tooling: Vite</li>
-                <li>Routing: React Router</li>
-                <li>Styling: Tailwind CSS + DaisyUI</li>
+                <li>Platform APIs integrated for Lichess and Chess.com data pulls.</li>
+                <li>Server routes normalize PGN responses for consistent parsing.</li>
+                <li>Supports source-specific behavior while preserving one dashboard UI.</li>
               </ul>
             </article>
             <article className="showcase-inner-card">
-              <p className="text-white/95 font-semibold">Architecture</p>
+              <p className="text-white/95 font-semibold">Data Storage + SQL</p>
               <ul className="mt-2 text-sm text-white/75 list-disc list-inside space-y-1">
-                <li>Main route: section-based showcase page.</li>
-                <li>Dynamic route for each hobby detail page.</li>
-                <li>Legacy paths redirect to section anchors.</li>
+                <li>Snapshots are persisted in Supabase on PostgreSQL.</li>
+                <li>Stored records are queryable via SQL for analytics and exports.</li>
+                <li>Enables historical tracking beyond one-time live API responses.</li>
               </ul>
             </article>
             <article className="showcase-inner-card">
-              <p className="text-white/95 font-semibold">UX Decisions</p>
+              <p className="text-white/95 font-semibold">AI Coach + Analytics</p>
               <ul className="mt-2 text-sm text-white/75 list-disc list-inside space-y-1">
-                <li>Header pill navigation with active-section highlighting.</li>
-                <li>Responsive layouts tuned for desktop and mobile.</li>
-                <li>Interactive visuals for projects, travel, and chess analytics.</li>
+                <li>AI Coach computes guidance from recent game windows or single games.</li>
+                <li>Signal parsing maps move quality labels/evals into trend metrics.</li>
+                <li>Dashboards expose filters, game selectors, and chart-based diagnostics.</li>
               </ul>
             </article>
           </div>

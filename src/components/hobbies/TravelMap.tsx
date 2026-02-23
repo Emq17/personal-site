@@ -842,7 +842,7 @@ export default function TravelMap() {
                     key={stop.id}
                     type="button"
                     onClick={() => setActiveStopId(stop.id)}
-                    className={`text-left px-3 py-3 rounded-xl border transition-all duration-200 ${
+                    className={`text-center md:text-left px-3 py-3 rounded-xl border transition-all duration-200 ${
                       isActive
                         ? "border-cyan-300/60 bg-cyan-300/15 text-white shadow-[0_0_0_1px_rgba(34,211,238,0.2)]"
                         : "border-white/10 bg-white/5 text-white/80 hover:bg-cyan-300/10 hover:border-cyan-300/35"

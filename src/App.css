@@ -166,6 +166,7 @@
 
 .showcase-contact-link {
   display: inline-flex;
+  justify-content: center;
   align-items: center;
   gap: 0.65rem;
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -268,6 +269,18 @@
   .skills-panel {
     grid-template-columns: 1fr;
   }
+  .skills-panel-head {
+    justify-content: center;
+    text-align: center;
+  }
+  .skills-panel-title {
+    justify-content: center;
+    text-align: center;
+    width: 100%;
+  }
+  .skills-token-wrap {
+    justify-content: center;
+  }
 }
 
 .project-highlights {
@@ -310,12 +323,13 @@
 .project-visual-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 0.75rem;
+  gap: 1.15rem;
 }
 
 @media (min-width: 820px) {
   .project-visual-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
   }
 }
 
