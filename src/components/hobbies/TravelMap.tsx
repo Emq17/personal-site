@@ -401,6 +401,14 @@ const travelStops: TravelStop[] = [
     note: "Beach city trips and coastal views.",
   },
   {
+    id: "reno",
+    city: "Reno, Nevada",
+    country: "United States",
+    lat: 39.5296,
+    lng: -119.8138,
+    note: "Northern Nevada city stop.",
+  },
+  {
     id: "salt-lake-city",
     city: "Salt Lake City, Utah",
     country: "United States",
@@ -700,7 +708,7 @@ export default function TravelMap() {
       <div className="relative flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 text-center sm:text-left">
         <p className="text-white/60 mt-1">Search, click, and spin through places I have visited.</p>
         <div className="hidden sm:flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-[11px] uppercase tracking-wider text-cyan-100">
-          Live Map
+          Interactive Map
         </div>
       </div>
 
