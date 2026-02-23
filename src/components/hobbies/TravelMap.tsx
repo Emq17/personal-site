@@ -594,7 +594,7 @@ export default function TravelMap() {
         ...stop,
         size: isActive ? 0.5 : 0.38,
         altitude: 0.004,
-        color: isActive ? "#ffe14a" : "#ffd33d",
+        color: isActive ? "#22c55e" : "#ffd33d",
       };
       return coreDot;
     });

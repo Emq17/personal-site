@@ -85,22 +85,6 @@ export const experiences = [
     ],
   },
   {
-    jobTitle: "",
-    companyName: "Turo",
-    companyUrl: "",
-    jobLocation: "Orlando, FL",
-    dateStarted: "Jan 2022",
-    dateEnded: "Nov 2023",
-    companyDescription: "Self-employed fleet operations",
-    jobSummary:
-      "Operated a multi-vehicle rental business serving airport and local travelers across Central Florida.",
-    keyAchievements: [
-      "Managed scheduling, logistics, pricing, and customer communication across a fleet of 8 vehicles.",
-      "Maintained high service quality through fast issue resolution and consistent vehicle readiness.",
-      "Coordinated pickups/drop-offs and compliance requirements while monitoring market demand and pricing.",
-    ],
-  },
-  {
     jobTitle: "System Researcher | Self Directed Quant Projects with Matt Owens",
     companyName: "Independent Collaboration with Matt Owens",
     companyUrl: "",
