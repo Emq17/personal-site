@@ -352,7 +352,7 @@ export default function Showcase() {
               <Link
                 key={hobby.slug}
                 to={`/hobby/${hobby.slug}`}
-                className="showcase-inner-card block hover:border-cyan-300/55 hover:bg-cyan-400/5 transition"
+                className="group showcase-inner-card block hover:border-cyan-300/55 hover:bg-cyan-400/5 transition"
               >
                 <p className="text-lg font-semibold">{hobby.title}</p>
                 <p className="text-white/65 text-sm mt-1">{hobby.summary}</p>
@@ -363,10 +363,13 @@ export default function Showcase() {
                     </span>
                   ))}
                 </div>
-                <p className="text-cyan-200/80 text-xs tracking-wide mt-4">
+                <p className="mt-4 inline-flex items-center gap-1.5 text-sm tracking-wide text-cyan-200/85 transition-all duration-200 group-hover:text-cyan-100 group-hover:translate-x-0.5">
                   {hobby.slug === "chess"
                     ? "View my dashboards"
+                    : hobby.slug === "music"
+                      ? "Watch me play"
                     : "Open details"}
+                  <span className="transition-transform duration-200 group-hover:translate-x-0.5">→</span>
                 </p>
               </Link>
             ))}
