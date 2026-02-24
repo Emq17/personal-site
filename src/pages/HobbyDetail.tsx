@@ -284,7 +284,12 @@ function openingMoveHint(label: string) {
 }
 
 function hasLichessSignalTags(text: string) {
-  return /(?:\?\?|\?!|!!|!\?|\$1|\$2|\$3|\$4|\$6)(?=\s|$)/.test(text);
+  return (
+    /(?:\?\?|\?!|!!|!\?|\$1|\$2|\$3|\$4|\$6)(?=\s|$)/.test(text) ||
+    /\{[^}]*\b(?:blunder|mistake|inaccuracy|brilliant|excellent|best|book|good move|missed win)\b[^}]*\}/i.test(
+      text
+    )
+  );
 }
 
 function hasLichessAnalysisData(text: string) {
@@ -327,6 +332,19 @@ function formatShortDate(date: Date | null) {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+function formatLocalYmd(date: Date | null) {
+  if (!date) return "Unknown";
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function formatShortTime(date: Date | null) {
+  if (!date) return "Unknown time";
+  return date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
 function percentOf(value: number, total: number) {
   if (total <= 0) return 0;
   return (value / total) * 100;
@@ -367,43 +385,61 @@ async function fetchChessComPgnDirect(username: string, maxGames = 220) {
 }
 
 function parseMoveQualityFromAnnotations(movesText: string) {
-  const cleaned = movesText
-    .replace(/\{[^}]*\}/g, " ")
-    .replace(/\([^)]*\)/g, " ")
-    .replace(/\s+/g, " ");
-  const normalized = cleaned
-    .replace(/\d+\.(\.\.)?/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  const tokens = normalized ? normalized.split(" ") : [];
+  const normalized = movesText.replace(/\([^)]*\)/g, " ").replace(/\[%[^\]]+\]/g, " ");
+  const tokens = normalized.match(/\{[^}]*\}|[^\s]+/g) ?? [];
 
   let whiteBlunders = 0;
   let whiteMistakes = 0;
   let whiteInaccuracies = 0;
   let whiteBrilliants = 0;
+  let whiteBestMoves = 0;
+  let whiteExcellentMoves = 0;
   let whiteGoodMoves = 0;
+  let whiteBookMoves = 0;
+  let whiteMissedWins = 0;
   let blackBlunders = 0;
   let blackMistakes = 0;
   let blackInaccuracies = 0;
   let blackBrilliants = 0;
+  let blackBestMoves = 0;
+  let blackExcellentMoves = 0;
   let blackGoodMoves = 0;
+  let blackBookMoves = 0;
+  let blackMissedWins = 0;
 
   const add = (
     side: "white" | "black",
-    kind: "blunder" | "mistake" | "inaccuracy" | "brilliant" | "good"
+    kind:
+      | "blunder"
+      | "mistake"
+      | "inaccuracy"
+      | "brilliant"
+      | "best"
+      | "excellent"
+      | "good"
+      | "book"
+      | "missedWin"
   ) => {
     if (side === "white") {
       if (kind === "blunder") whiteBlunders += 1;
       if (kind === "mistake") whiteMistakes += 1;
       if (kind === "inaccuracy") whiteInaccuracies += 1;
       if (kind === "brilliant") whiteBrilliants += 1;
+      if (kind === "best") whiteBestMoves += 1;
+      if (kind === "excellent") whiteExcellentMoves += 1;
       if (kind === "good") whiteGoodMoves += 1;
+      if (kind === "book") whiteBookMoves += 1;
+      if (kind === "missedWin") whiteMissedWins += 1;
     } else {
       if (kind === "blunder") blackBlunders += 1;
       if (kind === "mistake") blackMistakes += 1;
       if (kind === "inaccuracy") blackInaccuracies += 1;
       if (kind === "brilliant") blackBrilliants += 1;
+      if (kind === "best") blackBestMoves += 1;
+      if (kind === "excellent") blackExcellentMoves += 1;
       if (kind === "good") blackGoodMoves += 1;
+      if (kind === "book") blackBookMoves += 1;
+      if (kind === "missedWin") blackMissedWins += 1;
     }
   };
 
@@ -432,16 +468,39 @@ function parseMoveQualityFromAnnotations(movesText: string) {
   for (const token of tokens) {
     if (!token || token === "*" || token === "1-0" || token === "0-1" || token === "1/2-1/2") continue;
 
-    if (/^\$\d+$/.test(token)) {
-      applyNag(lastSide, token);
-      continue;
-    }
-    if (/^(?:\?\?|\?|!!|!\?|\?!|!)$/.test(token)) {
-      applyGlyph(lastSide, token);
+    if (token.startsWith("{") && token.endsWith("}")) {
+      const comment = token.slice(1, -1).toLowerCase();
+      if (!lastSide) continue;
+      if (comment.includes("missed win")) add(lastSide, "missedWin");
+      else if (comment.includes("blunder")) add(lastSide, "blunder");
+      else if (comment.includes("mistake")) add(lastSide, "mistake");
+      else if (comment.includes("inaccuracy")) add(lastSide, "inaccuracy");
+      else if (comment.includes("brilliant")) add(lastSide, "brilliant");
+      else if (comment.includes("excellent")) add(lastSide, "excellent");
+      else if (comment.includes("book")) add(lastSide, "book");
+      else if (/\bbest\b/.test(comment)) add(lastSide, "best");
+      else if (comment.includes("good move") || comment.startsWith("good")) add(lastSide, "good");
       continue;
     }
 
-    const suffix = token.match(/(\?\?|\?!|\?|!!|!\?)$/)?.[1] ?? "";
+    let moveToken = token;
+    const prefixedMove = moveToken.match(/^\d+\.(\.\.)?(.*)$/);
+    if (prefixedMove) {
+      moveToken = (prefixedMove[2] ?? "").trim();
+      if (!moveToken) continue;
+    }
+    if (/^\d+\.(\.\.)?$/.test(moveToken)) continue;
+
+    if (/^\$\d+$/.test(moveToken)) {
+      applyNag(lastSide, moveToken);
+      continue;
+    }
+    if (/^(?:\?\?|\?|!!|!\?|\?!|!)$/.test(moveToken)) {
+      applyGlyph(lastSide, moveToken);
+      continue;
+    }
+
+    const suffix = moveToken.match(/(\?\?|\?!|\?|!!|!\?)$/)?.[1] ?? "";
     if (suffix) applyGlyph(side, suffix);
 
     lastSide = side;
@@ -452,21 +511,21 @@ function parseMoveQualityFromAnnotations(movesText: string) {
     whiteBlunders,
     whiteMistakes,
     whiteInaccuracies,
-    whiteBestMoves: 0,
-    whiteExcellentMoves: 0,
+    whiteBestMoves,
+    whiteExcellentMoves,
     whiteGoodMoves,
-    whiteBookMoves: 0,
+    whiteBookMoves,
     blackBlunders,
     blackMistakes,
     blackInaccuracies,
-    blackBestMoves: 0,
-    blackExcellentMoves: 0,
+    blackBestMoves,
+    blackExcellentMoves,
     blackGoodMoves,
-    blackBookMoves: 0,
+    blackBookMoves,
     whiteBrilliants,
     blackBrilliants,
-    whiteMissedWins: 0,
-    blackMissedWins: 0,
+    whiteMissedWins,
+    blackMissedWins,
   };
 }
 
@@ -754,7 +813,7 @@ function buildChessSummary(games: ParsedChessGame[], preferredPlayers?: string[]
     }
     if (typeof g.myRating === "number") {
       ratingSeries.push({
-        label: g.date ? g.date.toISOString().slice(0, 10) : `${ratingSeries.length + 1}`,
+        label: g.date ? formatLocalYmd(g.date) : `${ratingSeries.length + 1}`,
         rating: g.myRating,
       });
     }
@@ -825,7 +884,7 @@ function buildChessSummary(games: ParsedChessGame[], preferredPlayers?: string[]
     }
     signalRows.push({
       gameNumber: signalRows.length + 1,
-      game: g.date ? g.date.toISOString().slice(0, 10) : `Game ${signalRows.length + 1}`,
+      game: g.date ? formatLocalYmd(g.date) : `Game ${signalRows.length + 1}`,
       myMoves: g.moveCount,
       bestMoves: g.annotationBestMoves,
       excellentMoves: g.annotationExcellentMoves,
@@ -1449,26 +1508,45 @@ function MiniSignalsChart({ rows }: { rows: SignalRow[] }) {
 }
 
 function BlunderTrendChart({ rows }: { rows: SignalRow[] }) {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
   if (rows.length < 2) {
     return <p className="text-sm text-white/55">Need at least 2 games for a blunder trend.</p>;
   }
-  const width = 760;
-  const height = 180;
-  const pad = 16;
-  const leftAxisPad = 44;
-  const bottomAxisPad = 26;
+  const width = 860;
+  const height = 240;
+  const pad = 18;
+  const leftAxisPad = 52;
+  const bottomAxisPad = 34;
   const plotW = width - leftAxisPad - pad;
   const plotH = height - bottomAxisPad - pad;
   const maxVal = Math.max(...rows.map((r) => r.blunders), 1);
   const stepX = plotW / (rows.length - 1);
-  const points = rows
-    .map((r, i) => `${leftAxisPad + i * stepX},${plotH + pad - (r.blunders / maxVal) * plotH}`)
-    .join(" ");
+  const points = rows.map((r, i) => ({
+    x: leftAxisPad + i * stepX,
+    y: plotH + pad - (r.blunders / maxVal) * plotH,
+    game: r.game,
+    blunders: r.blunders,
+  }));
+  const polylinePoints = points.map((p) => `${p.x},${p.y}`).join(" ");
   const yTicks = Array.from({ length: 4 }).map((_, i) => Math.round(maxVal - (i * maxVal) / 3));
+  const hoveredPoint = hoveredIndex != null ? points[hoveredIndex] : null;
 
   return (
-    <div className="rounded-lg border border-white/10 bg-[#0b1320] p-2 mt-3">
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-44">
+    <div className="relative rounded-lg border border-white/10 bg-[#0b1320] p-3 mt-3">
+      {hoveredPoint ? (
+        <div
+          className="pointer-events-none absolute z-20 min-w-[10rem] rounded-lg border border-rose-300/45 bg-[#0b1320]/95 px-3 py-2 text-sm text-rose-100 shadow-xl"
+          style={{
+            left: `calc(${((hoveredPoint.x + 10) / width) * 100}% + 0.25rem)`,
+            top: `calc(${((hoveredPoint.y - 32) / height) * 100}% + 0.25rem)`,
+          }}
+        >
+          <p className="leading-5">{hoveredPoint.game}</p>
+          <p className="leading-5 font-semibold">{hoveredPoint.blunders} blunders</p>
+        </div>
+      ) : null}
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-56">
         {Array.from({ length: 4 }).map((_, i) => {
           const y = pad + (i * plotH) / 3;
           return (
@@ -1486,12 +1564,25 @@ function BlunderTrendChart({ rows }: { rows: SignalRow[] }) {
         {yTicks.map((tick, i) => {
           const y = pad + (i * plotH) / 3 + 3;
           return (
-            <text key={`bt-yt-${tick}-${i}`} x="12" y={y} fill="rgba(203,213,225,0.72)" fontSize="10">
+            <text key={`bt-yt-${tick}-${i}`} x="12" y={y} fill="rgba(203,213,225,0.72)" fontSize="11">
               {tick}
             </text>
           );
         })}
-        <polyline fill="none" stroke="rgba(251,113,133,0.95)" strokeWidth="2.2" points={points} />
+        <polyline fill="none" stroke="rgba(251,113,133,0.95)" strokeWidth="2.2" points={polylinePoints} />
+        {points.map((point, i) => (
+          <circle
+            key={`bt-point-${point.game}-${i}`}
+            cx={point.x}
+            cy={point.y}
+            r={hoveredIndex === i ? 4.4 : 3.1}
+            fill={hoveredIndex === i ? "rgba(251,113,133,0.98)" : "rgba(251,113,133,0.84)"}
+            stroke="rgba(15,23,34,0.9)"
+            strokeWidth="1"
+            onMouseEnter={() => setHoveredIndex(i)}
+            onMouseLeave={() => setHoveredIndex(null)}
+          />
+        ))}
         <line
           x1={leftAxisPad}
           y1={plotH + pad}
@@ -1500,14 +1591,14 @@ function BlunderTrendChart({ rows }: { rows: SignalRow[] }) {
           stroke="rgba(148,163,184,0.35)"
           strokeWidth="1"
         />
-        <text x={leftAxisPad} y={height - 8} fill="rgba(203,213,225,0.72)" fontSize="10">
+        <text x={leftAxisPad} y={height - 10} fill="rgba(203,213,225,0.72)" fontSize="11">
           {rows[0]?.game}
         </text>
         <text
           x={leftAxisPad + plotW}
-          y={height - 8}
+          y={height - 10}
           fill="rgba(203,213,225,0.72)"
-          fontSize="10"
+          fontSize="11"
           textAnchor="end"
         >
           {rows[rows.length - 1]?.game}
@@ -1568,7 +1659,7 @@ export default function HobbyDetail() {
     if (platform === "chesscom") return fetchChessComPgnDirect(username, max);
     const directLichessUrl = `https://lichess.org/api/games/user/${encodeURIComponent(
       username
-    )}?max=${max}&opening=true&moves=true&evals=true&analysed=true&pgnInJson=false&format=pgn`;
+    )}?max=${max}&opening=true&moves=true&evals=true&pgnInJson=false&format=pgn`;
     const directRes = await fetch(directLichessUrl, {
       headers: { Accept: "application/x-chess-pgn,text/plain;q=0.9,*/*;q=0.8" },
     });
@@ -1905,6 +1996,11 @@ export default function HobbyDetail() {
     }
   }, [chessSummary, selectedSignalGame]);
   useEffect(() => {
+    if (!isChess) return;
+    setSignalsViewMode("game");
+    setSelectedSignalGame(-1);
+  }, [chessPlatform, isChess]);
+  useEffect(() => {
     if (!chessSummary || chessSummary.signalRows.length === 0) return;
     if (selectedMovesGame < 0) return;
     const hasSelected = chessSummary.signalRows.some((row) => row.gameNumber === selectedMovesGame);
@@ -2158,22 +2254,18 @@ export default function HobbyDetail() {
                         <p className="text-sm font-medium text-slate-200">{overviewStats.drawPct.toFixed(0)}% Draw</p>
                       </div>
                     </div>
-                    {chessPlatform === "all" ? (
-                      <div className="mt-4 text-center">
-                        <p className="text-xs uppercase tracking-[0.14em] text-white/55">Average Opponent Rating</p>
-                        <p className="text-3xl font-semibold text-white">{overviewStats.avgOpp ?? "-"}</p>
-                        <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-sm">
-                          <span className="text-emerald-300">+ {overviewStats.avgOppWin ?? "-"}</span>
-                          <span className="text-red-400">- {overviewStats.avgOppLoss ?? "-"}</span>
-                          <span className="text-slate-300">= {overviewStats.avgOppDraw ?? "-"}</span>
-                        </div>
-                      </div>
-                    ) : null}
                     {chessPlatform !== "all" ? (
                       <div className="mt-4">
-                        <p className="mb-3 text-center text-xs text-cyan-100/75">
-                          Overall win rate: {overviewStats.scorePct.toFixed(1)}%
-                        </p>
+                        <div className="mb-3 flex justify-center">
+                          <div className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/[0.04] px-3 py-1.5">
+                            <span className="text-[11px] uppercase tracking-[0.14em] text-white/65">
+                              Overall Win Rate
+                            </span>
+                            <span className="text-sm font-semibold text-white/88">
+                              {overviewStats.scorePct.toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
                           <p className="text-xs uppercase tracking-[0.14em] text-white/55">Best Win</p>
@@ -2217,7 +2309,7 @@ export default function HobbyDetail() {
                                   {game.oppName} {typeof game.oppRating === "number" ? `(${game.oppRating})` : ""}
                                 </p>
                                 <p className="text-xs text-white/55">
-                                  {formatShortDate(game.date)} · {game.myColor}
+                                  {formatShortDate(game.date)} · {game.myColor} · {formatShortTime(game.date)}
                                   {chessPlatform === "all"
                                     ? ` · ${accountToPlatformLabel(game.myAccount)}`
                                     : ""}
@@ -2272,70 +2364,78 @@ export default function HobbyDetail() {
                     </p>
                   </article>
                   {chessPlatform === "all" ? (
-                    <article className="showcase-inner-card xl:col-span-4">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-white/55">Avg Opponent</p>
-                      <p className="text-2xl font-semibold mt-1">{chessSummary.avgOpponent ?? "-"}</p>
+                    <article className="showcase-inner-card xl:col-span-4 border-cyan-300/30 bg-cyan-300/10">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-cyan-100/80">Overall Win Rate</p>
+                      <div className="mt-2 inline-flex min-w-[7.25rem] items-center justify-center rounded-lg border border-cyan-200/40 bg-[#0b1320] px-3 py-2">
+                        <p className="text-2xl font-semibold text-cyan-100">
+                          {chessSummary.overallScoreRate.toFixed(1)}%
+                        </p>
+                      </div>
                     </article>
                   ) : null}
 
                 </div>
 
-                <div className="showcase-inner-card">
-                  <div className="flex items-center justify-between gap-3 mb-2">
-                    <p className="text-sm uppercase tracking-wider text-white/60 inline-flex items-center gap-2">
-                      Rating Trend
-                      <HoverHelp text="Tracks rating trajectory over time. A flat trend with fewer drops is often better than volatile spikes." />
-                    </p>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setRatingWindow((w) => Math.max(10, w - 10))}
-                        className="h-7 w-7 rounded border border-white/20 bg-white/5 text-white/80 hover:bg-white/10"
-                        aria-label="Zoom in rating trend"
-                      >
-                        +
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setRatingWindow((w) =>
-                            Math.min(chessSummary.ratingSeries.length, w + 10)
-                          )
-                        }
-                        className="h-7 w-7 rounded border border-white/20 bg-white/5 text-white/80 hover:bg-white/10"
-                        aria-label="Zoom out rating trend"
-                      >
-                        -
-                      </button>
+                {chessPlatform !== "all" ? (
+                  <>
+                    <div className="showcase-inner-card">
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <p className="text-sm uppercase tracking-wider text-white/60 inline-flex items-center gap-2">
+                          Rating Trend
+                          <HoverHelp text="Tracks rating trajectory over time. A flat trend with fewer drops is often better than volatile spikes." />
+                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setRatingWindow((w) => Math.max(10, w - 10))}
+                            className="h-7 w-7 rounded border border-white/20 bg-white/5 text-white/80 hover:bg-white/10"
+                            aria-label="Zoom in rating trend"
+                          >
+                            +
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setRatingWindow((w) =>
+                                Math.min(chessSummary.ratingSeries.length, w + 10)
+                              )
+                            }
+                            className="h-7 w-7 rounded border border-white/20 bg-white/5 text-white/80 hover:bg-white/10"
+                            aria-label="Zoom out rating trend"
+                          >
+                            -
+                          </button>
+                        </div>
+                      </div>
+                      <MiniLineChart series={ratingSeriesWindow} />
                     </div>
-                  </div>
-                  <MiniLineChart series={ratingSeriesWindow} />
-                </div>
 
-                <div className="showcase-inner-card py-2 px-3">
-                  <div className="grid grid-cols-3 gap-2 text-xs sm:text-sm">
-                    <p className="text-white/70">
-                      Start:{" "}
-                      <span className="text-white/95 font-semibold">
-                        {ratingSeriesWindow[0]?.rating ?? "-"}
-                      </span>
-                    </p>
-                    <p className="text-white/70 text-center">
-                      Peak:{" "}
-                      <span className="text-white/95 font-semibold">
-                        {ratingSeriesWindow.length > 0
-                          ? Math.max(...ratingSeriesWindow.map((r) => r.rating))
-                          : "-"}
-                      </span>
-                    </p>
-                    <p className="text-white/70 text-right">
-                      Latest:{" "}
-                      <span className="text-white/95 font-semibold">
-                        {ratingSeriesWindow[ratingSeriesWindow.length - 1]?.rating ?? "-"}
-                      </span>
-                    </p>
-                  </div>
-                </div>
+                    <div className="showcase-inner-card py-2 px-3">
+                      <div className="grid grid-cols-3 gap-2 text-xs sm:text-sm">
+                        <p className="text-white/70">
+                          Start:{" "}
+                          <span className="text-white/95 font-semibold">
+                            {ratingSeriesWindow[0]?.rating ?? "-"}
+                          </span>
+                        </p>
+                        <p className="text-white/70 text-center">
+                          Peak:{" "}
+                          <span className="text-white/95 font-semibold">
+                            {ratingSeriesWindow.length > 0
+                              ? Math.max(...ratingSeriesWindow.map((r) => r.rating))
+                              : "-"}
+                          </span>
+                        </p>
+                        <p className="text-white/70 text-right">
+                          Latest:{" "}
+                          <span className="text-white/95 font-semibold">
+                            {ratingSeriesWindow[ratingSeriesWindow.length - 1]?.rating ?? "-"}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                ) : null}
 
                 <article className="showcase-inner-card">
                   <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
@@ -2409,7 +2509,31 @@ export default function HobbyDetail() {
                   </article>
                 </div>
 
-                {chessPlatform !== "chesscom" ? (
+                <article className="showcase-inner-card">
+                  <p className="text-sm uppercase tracking-wider text-white/60 mb-2">Move Quality Key</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-sm">
+                    <div className="rounded-lg border border-sky-300/20 bg-sky-300/10 px-3 py-2.5">
+                      <p className="text-sky-100 font-semibold">Inaccuracy</p>
+                      <p className="text-white/75 mt-1">
+                        A small miss. The move is playable, but a better option was available.
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2.5">
+                      <p className="text-amber-100 font-semibold">Mistake</p>
+                      <p className="text-white/75 mt-1">
+                        A clear error. It worsens your position noticeably.
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-rose-300/25 bg-rose-300/10 px-3 py-2.5">
+                      <p className="text-rose-100 font-semibold">Blunder</p>
+                      <p className="text-white/75 mt-1">
+                        A major error. It often loses large advantage, material, or the game.
+                      </p>
+                    </div>
+                  </div>
+                </article>
+
+                {chessPlatform === "lichess" ? (
                   <>
                     <article className="showcase-inner-card">
                       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
@@ -2507,14 +2631,14 @@ export default function HobbyDetail() {
                       <BlunderTrendChart rows={trendRowsWindow} />
                     </article>
                   </>
-                ) : (
+                ) : chessPlatform === "chesscom" ? (
                   <article className="showcase-inner-card">
                     <p className="text-sm uppercase tracking-wider text-white/60">Signals</p>
                     <p className="mt-2 text-sm text-white/65">
                       Signal and blunder-trend tables are hidden for Chess.com view because this account is on the free tier and those review tags are often unavailable.
                     </p>
                   </article>
-                )}
+                ) : null}
 
                 <article className="showcase-inner-card">
                   <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
@@ -2540,7 +2664,7 @@ export default function HobbyDetail() {
                           {(coachPerspective?.games ?? [])
                             .map((g, i) => ({
                               gameNumber: i + 1,
-                              game: g.date ? g.date.toISOString().slice(0, 10) : `Game ${i + 1}`,
+                              game: g.date ? formatLocalYmd(g.date) : `Game ${i + 1}`,
                             }))
                             .reverse()
                             .map((row) => (

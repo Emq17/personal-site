@@ -92,10 +92,10 @@ export default async function handler(req, res) {
   } else {
     const exportUrl = `https://lichess.org/games/export/${encodeURIComponent(
       username
-    )}?moves=true&tags=true&evals=true&analysed=true`;
+    )}?moves=true&tags=true&evals=true`;
     const apiUrl = `https://lichess.org/api/games/user/${encodeURIComponent(
       username
-    )}?max=${max}&opening=true&moves=true&evals=true&analysed=true&pgnInJson=false&format=pgn`;
+    )}?max=${max}&opening=true&moves=true&evals=true&pgnInJson=false&format=pgn`;
     ({ pgn, source } = await fetchFirstValidPgn([apiUrl, exportUrl]));
   }
   if (!pgn) {
