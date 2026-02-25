@@ -39,7 +39,7 @@ export default function Showcase() {
     bsProgram && "proofGallery" in bsProgram && Array.isArray(bsProgram.proofGallery)
       ? bsProgram.proofGallery
       : [];
-  const jpProofGallery = ["/projects/jp1.png", "/projects/jp2.png", "/projects/jp3.png", "/projects/jp4.png"];
+  const jpProofGallery = ["/projects/jp1.png", "/projects/jp3.png", "/projects/jp4.png"];
   const activeProof = expandedProof ? expandedProof.items[expandedProof.index] : null;
 
   const projectVisuals = [
@@ -53,7 +53,7 @@ export default function Showcase() {
       summary:
         "Responsive website for a local pop-up, built to showcase menu, brand, and location.",
       src: "/projects/coffee-shop-site.png",
-      projectUrl: "http://preandpostcoffee.vercel.app/",
+      projectUrl: "https://angelcoffeeshop.vercel.app",
       codeUrl: "https://github.com/Emq17/coffee-shop",
     },
     {
