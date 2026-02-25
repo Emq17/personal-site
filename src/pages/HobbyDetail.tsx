@@ -1148,6 +1148,8 @@ function buildAiCoachReport(recent: PlayerChessGame[]): CoachReport | null {
 }
 
 function MiniLineChart({ series }: { series: Array<{ label: string; rating: number }> }) {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
   if (series.length < 2) {
     return <p className="text-sm text-white/55">Not enough games yet for a trend line.</p>;
   }
@@ -1164,13 +1166,12 @@ function MiniLineChart({ series }: { series: Array<{ label: string; rating: numb
   const max = Math.max(...values);
   const range = Math.max(max - min, 1);
   const stepX = plotW / (values.length - 1);
-  const points = series
-    .map((s, i) => {
-      const x = leftAxisPad + i * stepX;
-      const y = plotH + pad - ((s.rating - min) / range) * plotH;
-      return `${x},${y}`;
-    })
-    .join(" ");
+  const points = series.map((s, i) => {
+    const x = leftAxisPad + i * stepX;
+    const y = plotH + pad - ((s.rating - min) / range) * plotH;
+    return { x, y, label: s.label, rating: s.rating };
+  });
+  const polylinePoints = points.map((point) => `${point.x},${point.y}`).join(" ");
   const horizontalGrid = 4;
   const verticalGrid = 6;
   const yTicks = Array.from({ length: horizontalGrid + 1 }).map((_, i) => {
@@ -1180,9 +1181,28 @@ function MiniLineChart({ series }: { series: Array<{ label: string; rating: numb
   const startLabel = series[0]?.label ?? "";
   const midLabel = series[Math.floor(series.length / 2)]?.label ?? "";
   const endLabel = series[series.length - 1]?.label ?? "";
+  const hoveredPoint = hoveredIndex != null ? points[hoveredIndex] : null;
 
   return (
-    <div className="rounded-lg border border-white/10 bg-[#0b1320] p-2">
+    <div className="relative rounded-lg border border-white/10 bg-[#0b1320] p-2">
+      {hoveredPoint ? (
+        <div
+          className="pointer-events-none absolute z-20 min-w-[11rem] rounded-lg border border-cyan-300/45 bg-[#0b1320]/95 px-3 py-2 text-xs text-cyan-100 shadow-xl"
+          style={{
+            left: `calc(${((hoveredPoint.x + 8) / width) * 100}% + 0.25rem)`,
+            top: `calc(${((hoveredPoint.y - 28) / height) * 100}% + 0.25rem)`,
+          }}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <p className="uppercase tracking-[0.12em] text-[10px] text-cyan-100/70">Date</p>
+            <p className="font-medium text-white/90">{hoveredPoint.label}</p>
+          </div>
+          <div className="mt-1 flex items-center justify-between gap-3">
+            <p className="uppercase tracking-[0.12em] text-[10px] text-cyan-100/70">Rating</p>
+            <p className="font-semibold text-cyan-100">{hoveredPoint.rating}</p>
+          </div>
+        </div>
+      ) : null}
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-56">
         {Array.from({ length: horizontalGrid + 1 }).map((_, i) => {
           const y = pad + (i * plotH) / horizontalGrid;
@@ -1224,8 +1244,21 @@ function MiniLineChart({ series }: { series: Array<{ label: string; rating: numb
           fill="none"
           stroke="rgba(34,211,238,0.95)"
           strokeWidth="2.6"
-          points={points}
+          points={polylinePoints}
         />
+        {points.map((point, i) => (
+          <circle
+            key={`rt-point-${point.label}-${i}`}
+            cx={point.x}
+            cy={point.y}
+            r={hoveredIndex === i ? 4.8 : 3.4}
+            fill={hoveredIndex === i ? "rgba(241,245,249,0.98)" : "rgba(203,213,225,0.95)"}
+            stroke="rgba(15,23,34,0.95)"
+            strokeWidth="1.2"
+            onMouseEnter={() => setHoveredIndex(i)}
+            onMouseLeave={() => setHoveredIndex(null)}
+          />
+        ))}
         <line
           x1={leftAxisPad}
           y1={pad}
@@ -1316,14 +1349,20 @@ function MyMovesTrendChart({ rows }: { rows: Array<{ game: string; myMoves: numb
     <div className="relative rounded-lg border border-white/10 bg-[#0b1320] p-2">
       {hoveredPoint ? (
         <div
-          className="pointer-events-none absolute z-20 rounded border border-cyan-300/45 bg-[#0b1320]/95 px-2 py-1 text-xs text-cyan-100 shadow-lg"
+          className="pointer-events-none absolute z-20 min-w-[11rem] rounded-lg border border-cyan-300/45 bg-[#0b1320]/95 px-3 py-2 text-xs text-cyan-100 shadow-xl"
           style={{
             left: `calc(${((hoveredPoint.x + 8) / width) * 100}% + 0.25rem)`,
             top: `calc(${((hoveredPoint.y - 28) / height) * 100}% + 0.25rem)`,
           }}
         >
-          <p>{hoveredPoint.game}</p>
-          <p>{hoveredPoint.myMoves} moves</p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="uppercase tracking-[0.12em] text-[10px] text-cyan-100/70">Date</p>
+            <p className="font-medium text-white/90">{hoveredPoint.game}</p>
+          </div>
+          <div className="mt-1 flex items-center justify-between gap-3">
+            <p className="uppercase tracking-[0.12em] text-[10px] text-cyan-100/70">Your Moves</p>
+            <p className="font-semibold text-cyan-100">{hoveredPoint.myMoves}</p>
+          </div>
         </div>
       ) : null}
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-64">
@@ -1355,8 +1394,10 @@ function MyMovesTrendChart({ rows }: { rows: Array<{ game: string; myMoves: numb
             key={`mv-pt-${point.game}-${i}`}
             cx={point.x}
             cy={point.y}
-            r={hoveredIndex === i ? 4.5 : 3.25}
-            fill="rgba(34,211,238,0.95)"
+            r={hoveredIndex === i ? 4.8 : 3.4}
+            fill={hoveredIndex === i ? "rgba(241,245,249,0.98)" : "rgba(203,213,225,0.95)"}
+            stroke="rgba(15,23,34,0.95)"
+            strokeWidth="1.1"
             onMouseEnter={() => setHoveredIndex(i)}
             onMouseLeave={() => setHoveredIndex((current) => (current === i ? null : current))}
           >
@@ -2043,22 +2084,34 @@ export default function HobbyDetail() {
     <div className="px-4 pb-20">
       <div className="mx-auto max-w-5xl space-y-6">
         {isChess ? (
-          <div className="flex justify-center">
-            <div className="inline-flex rounded-xl border border-white/15 bg-[#0b1320] p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
-              {(["lichess", "chesscom", "all"] as ChessPlatform[]).map((platform) => (
-                <button
-                  key={platform}
-                  type="button"
-                  onClick={() => setChessPlatform(platform)}
-                  className={`rounded-lg px-4 py-2 text-sm transition ${
-                    chessPlatform === platform
-                      ? "bg-cyan-300/20 text-cyan-100 border border-cyan-300/35"
-                      : "text-white/70 hover:bg-white/8"
-                  }`}
-                >
-                  {CHESS_PLATFORM_LABEL[platform]}
-                </button>
-              ))}
+          <div className="space-y-3">
+            <div className="flex justify-center">
+              <div className="inline-flex rounded-xl border border-white/15 bg-[#0b1320] p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+                {(["lichess", "chesscom", "all"] as ChessPlatform[]).map((platform) => (
+                  <button
+                    key={platform}
+                    type="button"
+                    onClick={() => setChessPlatform(platform)}
+                    className={`rounded-lg px-4 py-2 text-sm transition ${
+                      chessPlatform === platform
+                        ? "bg-cyan-300/20 text-cyan-100 border border-cyan-300/35"
+                        : "text-white/70 hover:bg-white/8"
+                    }`}
+                  >
+                    {CHESS_PLATFORM_LABEL[platform]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-center">
+              <a
+                href="https://chessreps.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-cyan-200/85 hover:text-cyan-100 underline underline-offset-4 transition"
+              >
+                ChessReps.com
+              </a>
             </div>
           </div>
         ) : isMusic ? (
@@ -2256,35 +2309,31 @@ export default function HobbyDetail() {
                     </div>
                     {chessPlatform !== "all" ? (
                       <div className="mt-4">
-                        <div className="mb-3 flex justify-center">
-                          <div className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/[0.04] px-3 py-1.5">
-                            <span className="text-[11px] uppercase tracking-[0.14em] text-white/65">
-                              Overall Win Rate
-                            </span>
-                            <span className="text-sm font-semibold text-white/88">
-                              {overviewStats.scorePct.toFixed(1)}%
-                            </span>
-                          </div>
-                        </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                          <p className="text-xs uppercase tracking-[0.14em] text-white/55">Best Win</p>
-                          <p className="mt-1 text-2xl font-semibold text-white">
-                            {overviewStats.bestWin?.oppRating ?? "-"}
-                          </p>
-                          <p className="text-sm text-white/80">
-                            {overviewStats.bestWin?.oppName ?? "No win in selected range"}
-                          </p>
-                        </div>
-                        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                          <p className="text-xs uppercase tracking-[0.14em] text-white/55">Best Streak</p>
-                          <p className="mt-1 text-2xl font-semibold text-white">{overviewStats.bestStreak}</p>
-                          <p className="text-sm text-white/80">
-                            {overviewStats.bestStreakEnd
-                              ? formatShortDate(overviewStats.bestStreakEnd.date)
-                              : "No streak yet"}
-                          </p>
-                        </div>
+                          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                            <p className="text-xs uppercase tracking-[0.14em] text-white/55 inline-flex items-center gap-1.5">
+                              Best Win
+                              <HoverHelp text="Highest-rated opponent you defeated in the selected range." />
+                            </p>
+                            <p className="mt-1 text-2xl font-semibold text-white">
+                              {overviewStats.bestWin?.oppRating ?? "-"}
+                            </p>
+                            <p className="text-sm text-white/80">
+                              {overviewStats.bestWin?.oppName ?? "No win in selected range"}
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                            <p className="text-xs uppercase tracking-[0.14em] text-white/55 inline-flex items-center gap-1.5">
+                              Best Streak
+                              <HoverHelp text="Longest consecutive win run in the selected range. Date shown is when that streak ended." />
+                            </p>
+                            <p className="mt-1 text-2xl font-semibold text-white">{overviewStats.bestStreak}</p>
+                            <p className="text-sm text-white/80">
+                              {overviewStats.bestStreakEnd
+                                ? formatShortDate(overviewStats.bestStreakEnd.date)
+                                : "No streak yet"}
+                            </p>
+                          </div>
                         </div>
                       </div>
                     ) : null}
@@ -2348,7 +2397,7 @@ export default function HobbyDetail() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-12 gap-3">
                   <article
-                    className={`showcase-inner-card ${chessPlatform === "all" ? "xl:col-span-4" : "xl:col-span-6"}`}
+                    className="showcase-inner-card xl:col-span-6"
                   >
                     <p className="text-[11px] uppercase tracking-[0.14em] text-white/55">White Win %</p>
                     <p className="text-2xl font-semibold mt-1 text-white/95">
@@ -2356,23 +2405,13 @@ export default function HobbyDetail() {
                     </p>
                   </article>
                   <article
-                    className={`showcase-inner-card ${chessPlatform === "all" ? "xl:col-span-4" : "xl:col-span-6"}`}
+                    className="showcase-inner-card xl:col-span-6"
                   >
                     <p className="text-[11px] uppercase tracking-[0.14em] text-white/55">Black Win %</p>
                     <p className="text-2xl font-semibold mt-1 text-white/95">
                       {chessSummary.blackWinRate.toFixed(0)}%
                     </p>
                   </article>
-                  {chessPlatform === "all" ? (
-                    <article className="showcase-inner-card xl:col-span-4 border-cyan-300/30 bg-cyan-300/10">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-cyan-100/80">Overall Win Rate</p>
-                      <div className="mt-2 inline-flex min-w-[7.25rem] items-center justify-center rounded-lg border border-cyan-200/40 bg-[#0b1320] px-3 py-2">
-                        <p className="text-2xl font-semibold text-cyan-100">
-                          {chessSummary.overallScoreRate.toFixed(1)}%
-                        </p>
-                      </div>
-                    </article>
-                  ) : null}
 
                 </div>
 
