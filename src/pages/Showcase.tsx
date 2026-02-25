@@ -316,9 +316,64 @@ export default function Showcase() {
                 </ul>
                 {exp.companyName === "Independent Collaboration" ? (
                   <div className="mt-3">
-                    <p className="inline-flex items-center rounded-md border border-cyan-300/40 bg-cyan-300/10 px-3 py-1.5 text-xs text-cyan-100">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedProof({
+                          items: [
+                            {
+                              src: resolvePublicAsset("/projects/m1.mp4"),
+                              label: "Backtest demo (system research)",
+                              kind: "video",
+                            },
+                            {
+                              src: resolvePublicAsset("/projects/m2.png"),
+                              label: "Research conversation snapshot",
+                              kind: "image",
+                            },
+                            {
+                              src: resolvePublicAsset("/projects/m3.png"),
+                              label: "Team partner",
+                              kind: "image",
+                            },
+                            {
+                              src: resolvePublicAsset("/projects/performance.png"),
+                              label: "Performance summary",
+                              kind: "image",
+                            },
+                            {
+                              src: resolvePublicAsset("/projects/chart.png"),
+                              label: "Equity chart",
+                              kind: "image",
+                            },
+                            {
+                              src: resolvePublicAsset("/projects/outofsample.png"),
+                              label: "Out-of-sample result",
+                              kind: "image",
+                            },
+                            {
+                              src: resolvePublicAsset("/projects/oos.png"),
+                              label: "OOS breakdown",
+                              kind: "image",
+                            },
+                            {
+                              src: resolvePublicAsset("/projects/walkforward.png"),
+                              label: "Walk-forward test",
+                              kind: "image",
+                            },
+                            {
+                              src: resolvePublicAsset("/projects/fitnessfunctions.png"),
+                              label: "Fitness function snapshot",
+                              kind: "image",
+                            },
+                          ],
+                          index: 0,
+                        })
+                      }
+                      className="inline-flex items-center rounded-md border border-cyan-300/40 bg-cyan-300/10 px-3 py-1.5 text-xs text-cyan-100 hover:border-cyan-300/65 hover:bg-cyan-300/18 transition"
+                    >
                       Work Samples
-                    </p>
+                    </button>
                   </div>
                 ) : null}
               </article>
