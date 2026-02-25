@@ -352,7 +352,7 @@ function percentOf(value: number, total: number) {
 
 function accountToPlatformLabel(account: string) {
   const source = CHESS_SOURCE_PLATFORMS.find((platform) => CHESS_USERS[platform] === account);
-  if (!source) return account;
+  if (!source) return "Linked account";
   return CHESS_PLATFORM_LABEL[source];
 }
 
@@ -1658,7 +1658,6 @@ export default function HobbyDetail() {
   const [pgnLoading, setPgnLoading] = useState(false);
   const [pgnError, setPgnError] = useState("");
   const [lastSyncedAt, setLastSyncedAt] = useState<string>("");
-  const [syncSource, setSyncSource] = useState<string>("");
   const [analysisWindow, setAnalysisWindow] = useState<number>(1);
   const [analysisViewMode, setAnalysisViewMode] = useState<"window" | "game">("window");
   const [selectedAnalysisGame, setSelectedAnalysisGame] = useState<number>(-1);
@@ -1730,11 +1729,6 @@ export default function HobbyDetail() {
         }
         setPgnText(directText);
         setLastSyncedAt(new Date().toLocaleTimeString());
-        setSyncSource(
-          chessPlatform === "all"
-            ? `Direct Combined (${selectedPlayers.join(" + ")})`
-            : `Direct ${CHESS_PLATFORM_LABEL[chessPlatform]} (${selectedPlayers[0]})`
-        );
         setPgnLoading(false);
         return;
       }
@@ -1758,11 +1752,6 @@ export default function HobbyDetail() {
         const latestSynced = syncedAtValues.length > 0 ? new Date(Math.max(...syncedAtValues)) : new Date();
         setPgnText(snapshotText);
         setLastSyncedAt(latestSynced.toLocaleTimeString());
-        setSyncSource(
-          chessPlatform === "all"
-            ? `Supabase snapshot (Combined · ${selectedPlayers.join(" + ")})`
-            : `Supabase snapshot (${CHESS_PLATFORM_LABEL[chessPlatform]} · ${selectedPlayers[0]})`
-        );
         setPgnLoading(false);
         return;
       }
@@ -1779,11 +1768,6 @@ export default function HobbyDetail() {
       }
       setPgnText(directText);
       setLastSyncedAt(new Date().toLocaleTimeString());
-      setSyncSource(
-        chessPlatform === "all"
-          ? `Direct Combined (${selectedPlayers.join(" + ")})`
-          : `Direct ${CHESS_PLATFORM_LABEL[chessPlatform]} (${selectedPlayers[0]})`
-      );
     } catch {
       setPgnError(
         `Live sync failed. Unable to reach API/${CHESS_PLATFORM_LABEL[chessPlatform]} from this environment.`
@@ -1829,11 +1813,6 @@ export default function HobbyDetail() {
         const latestSynced = syncedAtValues.length > 0 ? new Date(Math.max(...syncedAtValues)) : new Date();
         setPgnText(snapshotText);
         setLastSyncedAt(latestSynced.toLocaleTimeString());
-        setSyncSource(
-          chessPlatform === "all"
-            ? `Supabase snapshot (Combined · ${selectedPlayers.join(" + ")})`
-            : `Supabase snapshot (${CHESS_PLATFORM_LABEL[chessPlatform]} · ${selectedPlayers[0]})`
-        );
       } catch {
         await syncChessData();
       }
@@ -2219,7 +2198,6 @@ export default function HobbyDetail() {
             {lastSyncedAt ? (
               <p className="text-xs text-white/50 -mt-1 mb-3">
                 Last synced: {lastSyncedAt}
-                {syncSource ? ` · Source: ${syncSource}` : ""}
               </p>
             ) : null}
             {chessPlatform !== "lichess" ? (

@@ -12,11 +12,11 @@ export type Hobby = {
 export const hobbies: Hobby[] = [
   {
     slug: "chess",
-    title: "Chess",
+    title: "♟ Chess",
     summary:
-      "Strategic thinking and pattern recognition under pressure. Chess sharpens decision-making and long-range planning. I use it to practice discipline, controlled risk-taking, and staying calm in dynamic positions.",
+      "Strategic thinking under pressure. Chess sharpens my decision-making, pattern recognition, and long-range planning. I use it to train discipline, calculated risk-taking, and staying calm in complex, shifting positions.",
     description: "",
-    tags: ["Strategy", "Tactics", "Calculations"],
+    tags: ["Strategy", "Tactics", "Calculation"],
     stats: [
       { label: "Focus", value: "Rapid + Tactics" },
       { label: "Tracking", value: "Online profile metrics" },
@@ -26,43 +26,43 @@ export const hobbies: Hobby[] = [
   },
   {
     slug: "golfing",
-    title: "Golfing",
-    summary: "Composure and technical precision.",
+    title: "⛳ Golfing",
+    summary: "A pursuit of precision and composure. I track my swing data, distances, and performance trends to continuously refine technique and consistency, focusing on the small details that create big improvements.",
     description:
       "Golf reinforces process discipline, mental resets, and precision under pressure. Small adjustments and consistency make the difference.",
     tags: ["Precision", "Routine", "Composure"],
   },
   {
     slug: "martial-arts",
-    title: "Martial Arts",
-    summary: "Discipline, technique, and conditioning.",
+    title: "🥋 Martial Arts",
+    summary: "Built on discipline, technique, and conditioning. This includes competition experience, medals, and match footage, highlighting a state championship in Brazilian Jiu-Jitsu and a top-5 finish in Florida for wrestling.",
     description:
       "Martial arts helps build consistency, self-control, and confidence. It balances physical intensity with technical execution.",
     tags: ["Discipline", "Technique", "Conditioning"],
   },
   {
-    slug: "videography",
-    title: "Videography",
-    summary: "Storytelling through visuals.",
+    slug: "aviation",
+    title: "✈️ Aviation",
+    summary: "Situational awareness meets disciplined execution. This section features flight clips, Piper time, and airshow moments, focused on precision, safety, and decision-making in dynamic environments.",
     description:
-      "I enjoy creating visual stories through framing, pacing, and editing. It helps me think in narrative structure and creative direction.",
-    tags: ["Storytelling", "Editing", "Creativity"],
+      "Aviation builds strong checklist habits, risk management, and calm decision-making in fast-changing conditions.",
+    tags: ["Awareness", "Safety", "Discipline"],
   },
   {
     slug: "music",
-    title: "Music",
-    summary: "Creative rhythm and expression.",
+    title: "🎵 Music",
+    summary: "Creative rhythm and expression. Showcasing the instruments I play and original tracks I have recorded and produced, exploring sound, structure, and emotion through music.",
     description:
       "Music is a creative outlet that sharpens rhythm, focus, and emotional expression.",
     tags: ["Rhythm", "Expression", "Creativity"],
   },
   {
-    slug: "aviation",
-    title: "Aviation",
-    summary: "Situational awareness and disciplined execution.",
+    slug: "videography",
+    title: "🎥 Videography",
+    summary: "Storytelling through motion and light. This section features travel visuals and cinematic moments, capturing atmosphere, emotion, and perspective through thoughtful composition and editing.",
     description:
-      "Aviation builds strong checklist habits, risk management, and calm decision-making in fast-changing conditions.",
-    tags: ["Awareness", "Safety", "Discipline"],
+      "I enjoy creating visual stories through framing, pacing, and editing. It helps me think in narrative structure and creative direction.",
+    tags: ["Storytelling", "Editing", "Creativity"],
   },
 ];
 
