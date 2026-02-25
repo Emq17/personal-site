@@ -610,7 +610,7 @@ export default function Showcase() {
                 <button
                   type="button"
                   onClick={() => setExpandedProof(null)}
-                  className="absolute right-2 top-2 h-8 w-8 rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20 transition"
+                  className="absolute right-2 top-2 z-30 h-8 w-8 rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20 transition"
                   aria-label="Close proof preview"
                 >
                   ×
@@ -630,7 +630,7 @@ export default function Showcase() {
                             : prev
                         )
                       }
-                      className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20 transition"
+                      className="absolute left-2 top-1/2 z-30 -translate-y-1/2 h-8 w-8 rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20 transition"
                       aria-label="Previous image"
                     >
                       ‹
@@ -647,7 +647,7 @@ export default function Showcase() {
                             : prev
                         )
                       }
-                      className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20 transition"
+                      className="absolute right-2 top-1/2 z-30 -translate-y-1/2 h-8 w-8 rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20 transition"
                       aria-label="Next image"
                     >
                       ›
