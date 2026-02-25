@@ -36,30 +36,21 @@ Most personal sites are either resume-only or personality-only. I built this one
 - **Contact**: direct links for outreach
 
 ### Chess Dashboard (Hobby Detail)
-- Source switcher at the top of chess detail: **All**, **Lichess**, or **Chess.com**
-- **All** combines both connected usernames into one merged view
-- Same dashboard layout for both sources
-- New app-style **Performance Overview** block:
+- Platform switcher in chess detail: **Lichess**, **Chess.com**, **All Accounts**
+- **All Accounts** merges both connected sources into one unified view
+- Shared dashboard layout across sources with source-aware feature toggles
+- Performance Overview includes:
   - Time windows: `7 days`, `30 days`, `90 days`, `1 year`, `All Time`
   - Color filters: `All Games`, `White`, `Black`
-  - Segmented W/L/D performance bar with counts + percentages
-  - Average opponent rating with split by wins/losses/draws
+  - Segmented W/L/D bar with counts and percentages
   - Best win and best streak highlight cards
-  - Latest-first completed games list
-- Signal quality modes:
-  - **Single Game** selector (defaults to most recent game)
-  - **Totals** window selector for aggregate review
-- AI Coach review modes:
-  - **Single Game** selector for game-specific coaching
-  - **Totals** window selector for aggregate coaching windows
-- Signal source labeling:
-  - **Exact** when move labels are present
-  - **Estimated** when derived from platform eval tags
-- Signals hide zero-value categories in cards/charts to reduce clutter
-- New quick metrics under opening usage:
-  - **Your Moves (Game N)** (player-only move count, not total game plies)
-  - **Time Forfeits** + rate
-- Topline result counters are split into separate cards (**Wins**, **Draws**, **Losses**) for faster scanning
+  - Latest-first completed games list with platform labels
+- Signal and AI Coach panels support:
+  - **Single Game** mode (defaults to latest completed game)
+  - **Totals** mode for aggregate windows
+- Signal cards hide zero-value categories to keep view clean
+- Moves trend and rating trend include point-based hover details for per-game inspection
+- Top sync text now shows only `Last synced: <time>` (no exposed account username in UI)
 
 ## Technical Stack
 - **Frontend**: React 19 + TypeScript
@@ -70,7 +61,7 @@ Most personal sites are either resume-only or personality-only. I built this one
 
 ## Architecture Overview
 - Primary route: `/` (single-page section-based experience)
-- Dynamic route: `/hobby/:slug` (individual hobby detail pages)
+- Dynamic route: `/hobby/:slug` (chess + music detail views; other hobbies currently show preview cards)
 - Legacy routes are redirected into section anchors for continuity and backward compatibility
 
 ## UX / Product Decisions

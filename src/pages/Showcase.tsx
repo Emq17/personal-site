@@ -527,7 +527,6 @@ export default function Showcase() {
         <section id="contact" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28 text-center md:text-left">
           <p className="section-kicker">Get in touch</p>
           <h2 className="section-title">Contact</h2>
-          <p className="text-white/70">Reach out for collaborations, opportunities, or a quick intro.</p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-5">
             <a href="mailto:emmetteq17@gmail.com" className="showcase-contact-link justify-center">
@@ -575,6 +574,7 @@ export default function Showcase() {
                 <li>Platform APIs integrated for Lichess and Chess.com data pulls.</li>
                 <li>Server routes normalize PGN responses for consistent parsing.</li>
                 <li>Supports source-specific behavior while preserving one dashboard UI.</li>
+                <li>Frontend labels intentionally avoid exposing account usernames.</li>
               </ul>
             </article>
             <article className="showcase-inner-card">
@@ -590,7 +590,7 @@ export default function Showcase() {
               <ul className="mt-2 text-sm text-white/75 list-disc list-inside space-y-1">
                 <li>AI Coach computes guidance from recent game windows or single games.</li>
                 <li>Signal parsing maps move quality labels/evals into trend metrics.</li>
-                <li>Dashboards expose filters, game selectors, and chart-based diagnostics.</li>
+                <li>Dashboards expose filters, game selectors, chart diagnostics, and hover detail points.</li>
               </ul>
             </article>
           </div>
