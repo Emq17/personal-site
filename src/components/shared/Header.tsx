@@ -4,9 +4,9 @@ import { forwardRef, useEffect, useState } from "react";
 
 const sectionLinks = [
   { label: "Home", href: "/#hero" },
+  { label: "Projects", href: "/#projects" },
   { label: "Skills", href: "/#skills" },
   { label: "Languages", href: "/#languages" },
-  { label: "Projects", href: "/#projects" },
   { label: "Experience", href: "/#experience" },
   { label: "Education", href: "/#education" },
   { label: "Hobbies", href: "/#hobbies" },

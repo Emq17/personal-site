@@ -3,19 +3,19 @@ export const experiences = [
     jobTitle: "Business Analyst",
     companyName: "Wider Circle",
     companyUrl: "https://www.widercircle.com",
-    jobLocation: "Redwood City, CA",
+    jobLocation: "Redwood City, CA · Remote",
     dateStarted: "Jan 2024",
     dateEnded: "Nov 2025",
     companyDescription: "Connecting Neighbors for Better Health",
     jobSummary:
-      "Served as a bridge between Operations and Analytics, partnering with senior leadership to streamline reporting and decision-making across multiple departments.",
+      "Owned development of internal reporting and data products from requirements through deployment, enabling decision-making across departments.",
     keyAchievements: [
-      "Built and automated company-wide dashboards using Google Sheets/Excel, Apps Script, Tableau Prep/Desktop, and Salesforce SOQL, reducing manual workload and improving visibility.",
-      "Drove cross-functional collaboration within each department to align operational goals with data insights.",
-      "Designed and restructured SOPs and workflows to improve process efficiency and communication between teams.",
-      "Developed data automation tools using Python, SQL, AWS, and DBeaver to improve data accuracy and report scalability.",
-      "Supported strategic SLT initiatives via JIRA Service Desk requests, Salesforce Data Loader bulk imports, and weekly area/regional manager meetings.",
-      "Received ongoing mentorship from a Senior Director of Operations, Senior Operations Analyst, and Senior Data Developer while contributing to high-impact analytics and business strategy projects.",
+      "Built company-wide reporting systems and automated dashboards and pipelines across Google Sheets/Excel, Apps Script, Tableau Prep/Desktop, and Salesforce SOQL.",
+      "Improved data accuracy and scalability by resolving recurring integrity issues, eliminating manual failure points, and implementing validation checks using Python, SQL, and AWS.",
+      "Analyzed operational trends and data anomalies to identify root causes, document findings, and drove workflow and reporting improvements with stakeholders.",
+      "Delivered a source-of-truth KPI layer used by leadership and multiple departments for planning and performance tracking.",
+      "Reduced manual reporting and reconciliation by standardizing metrics and automating recurring workflows across teams.",
+      "Partnered with analysts using SQL tooling (e.g., DBeaver) to brainstorm queries, validate logic, and align reporting requirements.",
     ],
   },
   {
@@ -36,10 +36,10 @@ export const experiences = [
     ],
   },
   {
-    jobTitle: "Financial Analyst",
+    jobTitle: "Finance - Ops Analyst",
     companyName: "Import/Export Brokers",
     companyUrl: "",
-    jobLocation: "Manila, Philippines",
+    jobLocation: "Remote",
     dateStarted: "Jul 2020",
     dateEnded: "Dec 2023",
     companyDescription: "Brokerage firm assisting with international trade",
@@ -52,7 +52,7 @@ export const experiences = [
     ],
   },
   {
-    jobTitle: "IT Analyst",
+    jobTitle: "IT Specialist",
     companyName: "LogNPacific",
     companyUrl: "",
     jobLocation: "Remote",
@@ -63,7 +63,6 @@ export const experiences = [
       "Supported students by troubleshooting technical issues and resolving incoming support tickets.",
     keyAchievements: [
       "Provided direct support for student onboarding and day-to-day technical issues.",
-      "Troubleshot tickets and resolved recurring access and workflow blockers.",
       "Improved support responsiveness by documenting common issues and repeat fixes."
     ],
   },
@@ -85,20 +84,20 @@ export const experiences = [
     ],
   },
   {
-    jobTitle: "System Researcher | Self Directed Quant Projects with Matt Owens",
-    companyName: "Independent Collaboration with Matt Owens",
+    jobTitle: "System Researcher | Self Directed Freelance Quant Projects",
+    companyName: "Independent Collaboration",
     companyUrl: "",
-    jobLocation: "Remote",
+    jobLocation: "",
     dateStarted: "2018",
-    dateEnded: "2023",
+    dateEnded: "Present",
     companyDescription:
       "Independent research and development in quantitative modeling, analytics, and applied statistics.",
     jobSummary:
-      "Collaborated on quantitative research and spent five years developing and validating algorithmic systems that built a strong foundation in analytics, scripting, and applied statistics.",
+      "Collaborated on quantitative research and spent a few years developing and validating algorithmic systems that built a strong foundation in analytics, scripting, and applied statistics.",
     keyAchievements: [
       "Researched, developed, and validated algorithmic trading systems for futures and equities using Python, Excel, and machine learning.",
       "Applied Monte Carlo simulations, curve fitting, and multi-factor backtesting to evaluate robustness, stability, and risk.",
-      "Managed six-figure private investor trading capital and performed detailed risk, ROI, and drawdown analysis.",
+      "Performed detailed risk, ROI, and drawdown analysis.",
       "Configured virtual machines and automated data pipelines for continuous strategy testing.",
       "Founded and operated an e-commerce site selling proprietary trading algorithms, gaining experience in marketing analytics and product deployment."
     ],
@@ -120,7 +119,7 @@ export const experiences = [
   },
   {
     jobTitle: "Concierge Agent",
-    companyName: "Silvercar by Audi",
+    companyName: "Audi",
     companyUrl: "",
     jobLocation: "Orlando, FL",
     dateStarted: "2018",

@@ -79,9 +79,12 @@ export const education = [
 ];
 
 export const certifications = [
-  { name: "Course Careers", provider: "Course Careers" },
-  { name: "Code with Mosh", provider: "Code with Mosh" },
-  { name: "Udemy", provider: "Udemy" },
+  { name: "Course Careers (Information Technology and Data Analytics)", provider: "Course Careers" },
+  { name: "Code with Mosh (The Complete SQL Mastery Course, Ultimate Java Mastery Series)", provider: "Code with Mosh" },
+  {
+    name: "Udemy (IT Support Technical Skills Helpdesk, Design a CPU by Ross McGowan)",
+    provider: "Udemy",
+  },
 ];
 
 export const certificationCoursework = [
@@ -113,6 +116,12 @@ export const certificationCoursework = [
 
 export const certificationTraining = [
   "CompTIA Training",
-  "Information Technology Course",
-  "IT Support Technical Skills Helpdesk",
+];
+
+
+export const certificationTrainingLinks = [
+  {
+    name: "Business Analytics in Tech - Lillian Chiu",
+    url: "https://us.ppacademy.cc/project/36651D9F89DA6B24908490D70EE5B2C5/about",
+  },
 ];

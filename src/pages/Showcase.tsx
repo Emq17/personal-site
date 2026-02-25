@@ -8,6 +8,7 @@ import { experiences } from "../components/work-page/content/ExperiencesData";
 import {
   certifications,
   certificationTraining,
+  certificationTrainingLinks,
   education,
 } from "../components/work-page/content/EducationData";
 import ErrorBoundary from "../components/shared/ErrorBoundary";
@@ -22,7 +23,7 @@ export default function Showcase() {
     return `${import.meta.env.BASE_URL}${cleanPath}`;
   };
 
-  const [expandedProof, setExpandedProof] = useState<{ src: string; label: string } | null>(null);
+  const [expandedProof, setExpandedProof] = useState<{ items: Array<{ src: string; label: string; kind?: "image" | "video" }>; index: number } | null>(null);
   const hiddenExperienceCompanies = new Set([
     "Reunion & Westgate Resorts",
     "Market Street Cafe",
@@ -38,6 +39,8 @@ export default function Showcase() {
     bsProgram && "proofGallery" in bsProgram && Array.isArray(bsProgram.proofGallery)
       ? bsProgram.proofGallery
       : [];
+  const jpProofGallery = ["/projects/jp1.png", "/projects/jp2.png", "/projects/jp3.png", "/projects/jp4.png"];
+  const activeProof = expandedProof ? expandedProof.items[expandedProof.index] : null;
 
   const projectVisuals = [
     {
@@ -232,11 +235,11 @@ export default function Showcase() {
           </div>
         </section>
 
-        <section id="languages" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28 text-center md:text-left">
+                <section id="languages" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28 text-center md:text-left">
           <p className="section-kicker">Communication</p>
           <h2 className="section-title">Languages</h2>
           <div className="mt-4 grid grid-cols-6 gap-2 justify-items-center md:flex md:flex-wrap md:gap-2">
-            {["English", "Tagalog", "Spanish", "Japanese", "Korean"].map((language, idx) => (
+            {["English", "Tagalog", "Spanish", "Japanese"].map((language, idx) => (
               <span
                 key={language}
                 className={`showcase-chip col-span-2 ${
@@ -246,6 +249,43 @@ export default function Showcase() {
                 {language}
               </span>
             ))}
+          </div>
+          <div className="mt-5">
+            <p className="text-xs uppercase tracking-[0.14em] text-white/55 mb-2">Learning Progress</p>
+            <div className="flex flex-wrap gap-2 justify-center md:justify-start">
+              {jpProofGallery.map((proofSrc, idx) => (
+                <button
+                  key={`jp-proof-${proofSrc}`}
+                  type="button"
+                  onClick={() =>
+                    setExpandedProof({
+                      items: jpProofGallery.map((src, i) => ({
+                        src: resolvePublicAsset(src),
+                        label: `Japanese learning snapshot ${i + 1}`,
+                      })),
+                      index: idx,
+                    })
+                  }
+                  className="overflow-hidden rounded-md border border-cyan-300/40 bg-[#0b1320] hover:border-cyan-300/65 transition shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
+                  aria-label={`Open Japanese learning snapshot ${idx + 1}`}
+                >
+                  <img
+                    src={resolvePublicAsset(proofSrc)}
+                    alt={`Japanese learning snapshot ${idx + 1}`}
+                    loading="lazy"
+                    className="h-20 w-24 object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                      const fallback = e.currentTarget.nextElementSibling as HTMLElement | null;
+                      if (fallback) fallback.style.display = "grid";
+                    }}
+                  />
+                  <span className="hidden h-20 w-24 place-items-center px-2 text-[11px] text-white/65">
+                    Add {proofSrc}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
         </section>
 
@@ -259,7 +299,7 @@ export default function Showcase() {
                   <div>
                     {exp.jobTitle ? <p className="text-xl font-semibold">{exp.jobTitle}</p> : null}
                     <p className="text-white/65 text-sm mt-1">
-                      {exp.companyName} · {exp.jobLocation}
+                      {exp.jobLocation ? `${exp.companyName} · ${exp.jobLocation}` : exp.companyName}
                     </p>
                   </div>
                   {exp.dateStarted || exp.dateEnded ? (
@@ -270,14 +310,22 @@ export default function Showcase() {
                 </div>
                 <p className="text-white/70 mt-3 text-sm md:text-base">{exp.jobSummary}</p>
                 <ul className="mt-3 space-y-1 text-white/72 list-disc list-inside text-sm">
-                  {exp.keyAchievements.slice(0, 2).map((point) => (
+                  {exp.keyAchievements.map((point) => (
                     <li key={`${exp.jobTitle}-${point}`}>{point}</li>
                   ))}
                 </ul>
+                {exp.companyName === "Independent Collaboration" ? (
+                  <div className="mt-3">
+                    <p className="inline-flex items-center rounded-md border border-cyan-300/40 bg-cyan-300/10 px-3 py-1.5 text-xs text-cyan-100">
+                      Work Samples
+                    </p>
+                  </div>
+                ) : null}
               </article>
             ))}
           </div>
         </section>
+
 
         <section id="education" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28 text-center md:text-left">
           <p className="section-kicker">Background</p>
@@ -316,8 +364,11 @@ export default function Showcase() {
                       type="button"
                       onClick={() =>
                         setExpandedProof({
-                          src: resolvePublicAsset(proofSrc),
-                          label: idx === 0 ? "Remaining classes snapshot" : "Full course load snapshot",
+                          items: bsProofGallery.map((src, i) => ({
+                            src: resolvePublicAsset(src),
+                            label: i === 0 ? "Remaining classes snapshot" : "Full course load snapshot",
+                          })),
+                          index: idx,
                         })
                       }
                       className="overflow-hidden rounded-md border border-cyan-300/40 bg-[#0b1320] hover:border-cyan-300/65 transition shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
@@ -344,20 +395,40 @@ export default function Showcase() {
                 {[...certificationTraining, ...certifications.map((cert) => cert.name)].map((item) => (
                   <li key={`training-${item}`}>{item}</li>
                 ))}
+                {certificationTrainingLinks.map((item) => (
+                  <li key={`training-link-${item.url}`}>
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-cyan-200/90 underline underline-offset-4 hover:text-cyan-100"
+                    >
+                      {item.name}
+                    </a>
+                  </li>
+                ))}
               </ul>
+              </div>
             </div>
-          </div>
         </section>
 
         <section id="hobbies" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28 text-center md:text-left">
           <p className="section-kicker">Life Outside Work</p>
           <h2 className="section-title">Hobbies</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-5">
-            {hobbies.map((hobby) => (
+            {hobbies.map((hobby, index) => {
+              const isTwoCardLastRow = hobbies.length % 3 === 2 && index >= hobbies.length - 2;
+              const placementClass =
+                isTwoCardLastRow && index === hobbies.length - 1 ? "lg:col-start-3" : "";
+
+              return (
               <Link
                 key={hobby.slug}
                 to={`/hobby/${hobby.slug}`}
-                className="group showcase-inner-card block hover:border-cyan-300/55 hover:bg-cyan-400/5 transition"
+                onClick={(event) => {
+                  if (hobby.slug !== "chess") event.preventDefault();
+                }}
+                className={`group showcase-inner-card block hover:border-cyan-300/55 hover:bg-cyan-400/5 transition ${placementClass}`}
               >
                 <p className="text-lg font-semibold">{hobby.title}</p>
                 <p className="text-white/65 text-sm mt-1">{hobby.summary}</p>
@@ -371,13 +442,14 @@ export default function Showcase() {
                 <p className="mt-4 inline-flex items-center gap-1.5 text-sm tracking-wide text-cyan-200/85 transition-all duration-200 group-hover:text-cyan-100 group-hover:translate-x-0.5">
                   {hobby.slug === "chess"
                     ? "Dashboards, AI Coach, & Statistics"
-                    : hobby.slug === "music"
-                      ? "Watch me play"
-                    : "Open details"}
-                  <span className="transition-transform duration-200 group-hover:translate-x-0.5">→</span>
+                    : "More insights coming soon"}
+                  {hobby.slug === "chess" ? (
+                    <span className="transition-transform duration-200 group-hover:translate-x-0.5">→</span>
+                  ) : null}
                 </p>
               </Link>
-            ))}
+              );
+            })}
           </div>
         </section>
 
@@ -488,18 +560,59 @@ export default function Showcase() {
                 >
                   ×
                 </button>
-                <p className="text-sm text-cyan-100/85 mb-2 pr-10">{expandedProof.label}</p>
-                <img
-                  src={expandedProof.src}
-                  alt={expandedProof.label}
-                  onError={(e) => {
-                    const fallback = resolvePublicAsset("/projects/remaining-classes.png");
-                    if (e.currentTarget.src !== fallback) {
-                      e.currentTarget.src = fallback;
-                    }
-                  }}
-                  className="w-full max-h-[75vh] object-contain rounded-lg bg-[#050b16]"
-                />
+                <p className="text-sm text-cyan-100/85 mb-2 pr-10">{activeProof?.label}</p>
+                {expandedProof.items.length > 1 ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedProof((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                index: (prev.index - 1 + prev.items.length) % prev.items.length,
+                              }
+                            : prev
+                        )
+                      }
+                      className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20 transition"
+                      aria-label="Previous image"
+                    >
+                      ‹
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedProof((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                index: (prev.index + 1) % prev.items.length,
+                              }
+                            : prev
+                        )
+                      }
+                      className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20 transition"
+                      aria-label="Next image"
+                    >
+                      ›
+                    </button>
+                  </>
+                ) : null}
+                {activeProof?.kind === "video" ? (
+                  <video
+                    src={activeProof.src}
+                    className="w-full max-h-[75vh] rounded-lg bg-[#050b16]"
+                    controls
+                    playsInline
+                  />
+                ) : (
+                  <img
+                    src={activeProof?.src}
+                    alt={activeProof?.label}
+                    className="w-full max-h-[75vh] object-contain rounded-lg bg-[#050b16]"
+                  />
+                )}
               </div>
             </div>,
             document.body

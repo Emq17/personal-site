@@ -100,14 +100,6 @@ const Hobbies = () => {
           />
         </section>
 
-        <section id="hob-workingout" className="py-12">
-          <Card
-            title="Working Out"
-            desc="Consistency, progressive overload, and recovery—simple, hard, effective."
-            tags={["Strength", "Mobility", "Discipline", "Routine"]}
-          />
-        </section>
-
         <section id="hob-videography" className="py-12">
           <Card
             title="Videography"

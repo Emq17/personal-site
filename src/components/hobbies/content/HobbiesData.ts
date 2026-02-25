@@ -41,14 +41,6 @@ export const hobbies: Hobby[] = [
     tags: ["Discipline", "Technique", "Conditioning"],
   },
   {
-    slug: "working-out",
-    title: "Working Out",
-    summary: "Consistency, strength, and recovery.",
-    description:
-      "Training keeps me physically and mentally consistent. I focus on progressive overload, mobility, and recovery quality.",
-    tags: ["Strength", "Mobility", "Consistency"],
-  },
-  {
     slug: "videography",
     title: "Videography",
     summary: "Storytelling through visuals.",
@@ -63,6 +55,14 @@ export const hobbies: Hobby[] = [
     description:
       "Music is a creative outlet that sharpens rhythm, focus, and emotional expression.",
     tags: ["Rhythm", "Expression", "Creativity"],
+  },
+  {
+    slug: "aviation",
+    title: "Aviation",
+    summary: "Situational awareness and disciplined execution.",
+    description:
+      "Aviation builds strong checklist habits, risk management, and calm decision-making in fast-changing conditions.",
+    tags: ["Awareness", "Safety", "Discipline"],
   },
 ];
 
