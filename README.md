@@ -1,4 +1,4 @@
-# Emmette Quiambao — Life, Work, and Everything In Between
+# Life, Work, and Everything In Between
 
 A modern, production-deployed personal website that blends my work, interests, travel, and day-to-day identity into one cohesive experience.
 
@@ -14,11 +14,9 @@ Most personal sites are either resume-only or personality-only. I built this one
 - personal enough to reflect hobbies, travel, and personality
 - flexible enough to evolve as I add new projects and life updates
 
-## Why This Project Stands Out
+## Highlights
 - Built as a **single, cohesive showcase flow** instead of disconnected pages
-- Presents both **business impact** and **technical execution**
 - Shows the person behind the work, not just the work itself
-- Organizes content intentionally: projects, skills, experience, education, hobbies, and travel
 - Includes interactive experiences (travel globe, image-based project previews, dynamic hobby pages)
 - Optimized for scanability: section pills, clear typography hierarchy, and concise content blocks
 
@@ -33,9 +31,8 @@ Most personal sites are either resume-only or personality-only. I built this one
 - **Experience**: timeline of analytical, operational, technical, and client-facing roles
 - **Education**: degree path and certifications
 - **Hobbies + Travel**: personality, interests, and global travel footprint to round out the profile
-- **Contact**: direct links for outreach
 
-### Chess Dashboard (Hobby Detail)
+### Chess Dashboard (Hobby Subpage)
 - Platform switcher in chess detail: **Lichess**, **Chess.com**, **All Accounts**
 - **All Accounts** merges both connected sources into one unified view
 - Shared dashboard layout across sources with source-aware feature toggles
@@ -59,12 +56,7 @@ Most personal sites are either resume-only or personality-only. I built this one
 - **Styling**: Tailwind CSS v4 + DaisyUI
 - **3D/Visualization**: react-globe.gl + three.js
 
-## Architecture Overview
-- Primary route: `/` (single-page section-based experience)
-- Dynamic route: `/hobby/:slug` (chess + music detail views; other hobbies currently show preview cards)
-- Legacy routes are redirected into section anchors for continuity and backward compatibility
-
-## UX / Product Decisions
+## UX
 - Section-aware pill navigation with active-state tracking
 - Header-aware anchor scrolling for clean section alignment
 - Responsive behavior tuned for both desktop and mobile
