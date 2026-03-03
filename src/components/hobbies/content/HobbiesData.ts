@@ -27,7 +27,7 @@ export const hobbies: Hobby[] = [
   {
     slug: "golfing",
     title: "⛳ Golfing",
-    summary: "A pursuit of precision and composure. I track my swing data, distances, and performance trends to continuously refine technique and consistency, focusing on the small details that create big improvements.",
+    summary: "A pursuit of precision and composure. I track my swing form, distances, and overall performance using Trackman data to continuously refine technique and consistency, focusing on the small details that create big improvements.",
     description:
       "Golf reinforces process discipline, mental resets, and precision under pressure. Small adjustments and consistency make the difference.",
     tags: ["Precision", "Routine", "Composure"],
