@@ -238,13 +238,11 @@ export default function Showcase() {
                 <section id="languages" className="reveal showcase-card p-6 md:p-8 mt-20 md:mt-28 text-center md:text-left">
           <p className="section-kicker">Communication</p>
           <h2 className="section-title">Languages</h2>
-          <div className="mt-4 grid grid-cols-6 gap-2 justify-items-center md:flex md:flex-wrap md:gap-2">
-            {["English", "Tagalog", "Spanish", "Japanese"].map((language, idx) => (
+          <div className="mt-4 flex flex-nowrap items-center justify-start gap-2 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible md:pb-0">
+            {["English", "Tagalog", "Spanish", "Japanese"].map((language) => (
               <span
                 key={language}
-                className={`showcase-chip col-span-2 ${
-                  idx === 3 ? "col-start-2" : idx === 4 ? "col-start-4" : ""
-                } md:col-auto md:col-start-auto`}
+                className="showcase-chip shrink-0"
               >
                 {language}
               </span>
