@@ -1,5 +1,5 @@
 import { Link, useParams } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { hobbyBySlug } from "../components/hobbies/content/HobbiesData";
 
 type ParsedChessGame = {
@@ -143,7 +143,7 @@ type CoachReport = {
   focus: string;
   quickFixes: string[];
   checklist: string[];
-  secretInsights: string[];
+  secretInsights: Array<{ text: string; example: string }>;
   visuals: Array<{ label: string; value: number; hint: string }>;
 };
 
@@ -242,12 +242,48 @@ const EMPTY_MOVE_SIGNAL_COUNTS: MoveSignalCounts = {
 };
 
 function HoverHelp({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLSpanElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (containerRef.current && target && !containerRef.current.contains(target)) {
+        setOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
   return (
-    <span className="relative inline-flex items-center group align-middle">
-      <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-cyan-300/40 bg-cyan-300/10 text-[10px] text-cyan-100">
+    <span ref={containerRef} className="relative inline-flex items-center group align-middle">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-label="More information"
+        aria-expanded={open}
+        className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-cyan-300/40 bg-cyan-300/10 text-[10px] text-cyan-100"
+      >
         i
-      </span>
-      <span className="pointer-events-none absolute z-20 left-1/2 top-full mt-2 w-56 -translate-x-1/2 rounded-md border border-white/15 bg-[#0b1320] px-2 py-1.5 text-[11px] text-white/80 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+      </button>
+      <span
+        className={`pointer-events-none absolute z-20 left-1/2 top-full mt-2 w-56 -translate-x-1/2 rounded-md border border-white/15 bg-[#0b1320] px-2 py-1.5 text-[11px] text-white/80 shadow-lg transition-opacity ${
+          open ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+        }`}
+      >
         {text}
       </span>
     </span>
@@ -348,6 +384,20 @@ function formatShortTime(date: Date | null) {
 function percentOf(value: number, total: number) {
   if (total <= 0) return 0;
   return (value / total) * 100;
+}
+
+function isClockForfeitTermination(termination: string) {
+  const normalized = String(termination ?? "").toLowerCase();
+  if (!normalized) return false;
+
+  return (
+    normalized.includes("time forfeit") ||
+    normalized.includes("won on time") ||
+    normalized.includes("ran out of time") ||
+    normalized.includes("timeout") ||
+    normalized.includes("time out") ||
+    normalized.includes("abandoned")
+  );
 }
 
 function accountToPlatformLabel(account: string) {
@@ -877,7 +927,7 @@ function buildChessSummary(games: ParsedChessGame[], preferredPlayers?: string[]
         lossBaseMinutesGames += 1;
       }
     }
-    if (/time forfeit/i.test(g.termination)) {
+    if (isClockForfeitTermination(g.termination)) {
       timeForfeits += 1;
       if (g.myResult === "loss") myTimeForfeits += 1;
       if (g.myResult === "win") opponentTimeForfeits += 1;
@@ -1016,7 +1066,7 @@ function buildAiCoachReport(recent: PlayerChessGame[]): CoachReport | null {
   const losses = recent.filter((g) => g.myResult === "loss").length;
   const draws = recent.filter((g) => g.myResult === "draw").length;
   const wins = recent.filter((g) => g.myResult === "win").length;
-  const timeForfeits = recent.filter((g) => /time forfeit/i.test(g.termination)).length;
+  const timeForfeits = recent.filter((g) => isClockForfeitTermination(g.termination)).length;
   const shortLosses = recent.filter((g) => g.myResult === "loss" && g.moveCount <= 25).length;
   const whiteLosses = recent.filter((g) => g.myColor === "White" && g.myResult === "loss").length;
   const blackLosses = recent.filter((g) => g.myColor === "Black" && g.myResult === "loss").length;
@@ -1092,14 +1142,37 @@ function buildAiCoachReport(recent: PlayerChessGame[]): CoachReport | null {
   const mostPunishedEco = [...lossByEco.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
   const secretInsights = [
     mostPunishedEco
-      ? `Opponents are scoring against you most often in ${mostPunishedEco}. Prepare two model games and one endgame plan from that structure.`
-      : "Your opening spread is healthy; focus on converting equal middlegames, not memorizing more lines.",
+      ? {
+          text: `Opponents are scoring against you most often in ${mostPunishedEco}. Prepare two model games and one endgame plan from that structure.`,
+          example: `If ${mostPunishedEco} caused 4 of your last 10 losses, study 2 strong games in ${mostPunishedEco} and rehearse one endgame setup from it before your next session.`,
+        }
+      : {
+          text: "Your opening spread is healthy; focus on converting equal middlegames, not memorizing more lines.",
+          example:
+            "If you reach equal positions after move 15, practice a conversion drill: improve worst piece, make one useful pawn break, and trade when ahead in structure.",
+        },
     timeForfeits > 0
-      ? "Your clock losses are technique losses in disguise. Use a hard time budget by move 20 and refuse deep side-lines when behind on time."
-      : "Your clock control is decent. Convert this into rating by forcing simpler positions when ahead.",
+      ? {
+          text: "Your clock losses are technique losses in disguise. Use a hard time budget by move 20 and refuse deep side-lines when behind on time.",
+          example:
+            "In a 10+0 game, target at least 6:00 remaining by move 20; if below that, choose solid moves and avoid long tactical branches.",
+        }
+      : {
+          text: "Your clock control is decent. Convert this into rating by forcing simpler positions when ahead.",
+          example:
+            "When up a pawn with more time, trade queens and one pair of rooks to reduce counterplay and convert cleanly.",
+        },
     avgMoveCount < 28
-      ? "Your games are ending too early. Build a 'stability phase' between moves 12-20 to avoid premature collapses."
-      : "Your games go long enough; train conversion technique in slightly better endgames to turn draws into wins.",
+      ? {
+          text: "Your games are ending too early. Build a 'stability phase' between moves 12-20 to avoid premature collapses.",
+          example:
+            "Before launching tactics around move 15, run a 15-second checklist: king safety, undefended pieces, and opponent forcing threats.",
+        }
+      : {
+          text: "Your games go long enough; train conversion technique in slightly better endgames to turn draws into wins.",
+          example:
+            "If rook endgames keep drawing, practice Lucena and Philidor positions and apply those plans in your next 5 games.",
+        },
   ];
 
   const toScore = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
@@ -1875,6 +1948,15 @@ export default function HobbyDetail() {
     if (exactCount === 0 && estimatedCount === 0) return "No Data";
     return `Mixed (${exactCount} exact / ${estimatedCount} estimated)`;
   }, [activeSignalRows]);
+  const signalsSourceBadgeMobile = useMemo(() => {
+    if (activeSignalRows.length === 0) return "No Data";
+    const exactCount = activeSignalRows.filter((row) => row.source === "exact").length;
+    const estimatedCount = activeSignalRows.filter((row) => row.source === "estimated").length;
+    if (exactCount === activeSignalRows.length) return "Exact";
+    if (estimatedCount === activeSignalRows.length) return "Estimated";
+    if (exactCount === 0 && estimatedCount === 0) return "No Data";
+    return "Mixed";
+  }, [activeSignalRows]);
   const hasSignalSourceData = useMemo(
     () =>
       parsedChessGames.some(
@@ -2526,30 +2608,6 @@ export default function HobbyDetail() {
                   </article>
                 </div>
 
-                <article className="showcase-inner-card">
-                  <p className="text-sm uppercase tracking-wider text-white/60 mb-2">Move Quality Key</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-sm">
-                    <div className="rounded-lg border border-sky-300/20 bg-sky-300/10 px-3 py-2.5">
-                      <p className="text-sky-100 font-semibold">Inaccuracy</p>
-                      <p className="text-white/75 mt-1">
-                        A small miss. The move is playable, but a better option was available.
-                      </p>
-                    </div>
-                    <div className="rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2.5">
-                      <p className="text-amber-100 font-semibold">Mistake</p>
-                      <p className="text-white/75 mt-1">
-                        A clear error. It worsens your position noticeably.
-                      </p>
-                    </div>
-                    <div className="rounded-lg border border-rose-300/25 bg-rose-300/10 px-3 py-2.5">
-                      <p className="text-rose-100 font-semibold">Blunder</p>
-                      <p className="text-white/75 mt-1">
-                        A major error. It often loses large advantage, material, or the game.
-                      </p>
-                    </div>
-                  </div>
-                </article>
-
                 {chessPlatform === "lichess" ? (
                   <>
                     <article className="showcase-inner-card">
@@ -2582,8 +2640,12 @@ export default function HobbyDetail() {
                                 ))}
                             </select>
                           ) : null}
-                          <span className="rounded-lg border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-white/70">
-                            {signalsSourceBadge}
+                          <span
+                            className="rounded-lg border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-white/70 max-w-full"
+                            title={signalsSourceBadge}
+                          >
+                            <span className="sm:hidden">{signalsSourceBadgeMobile}</span>
+                            <span className="hidden sm:inline">{signalsSourceBadge}</span>
                           </span>
                           {signalsViewMode === "window" ? (
                             <select
@@ -2762,9 +2824,12 @@ export default function HobbyDetail() {
                         <p className="text-[11px] uppercase tracking-wider text-cyan-100/70 mb-1">
                           Secret Insights
                         </p>
-                        <ul className="list-disc list-inside space-y-1 text-white/75">
+                        <ul className="space-y-2 text-white/75">
                           {coachReport.secretInsights.map((item) => (
-                            <li key={item}>{item}</li>
+                            <li key={item.text}>
+                              <p className="list-item list-disc list-inside">{item.text}</p>
+                              <p className="pl-5 text-white/60 text-xs mt-0.5">Example: {item.example}</p>
+                            </li>
                           ))}
                         </ul>
                       </div>
