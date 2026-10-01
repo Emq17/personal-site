@@ -23,7 +23,7 @@ export const education = [
   {
     institution: "Western Governors University",
     program: "Computer Science - B.S.",
-    status: "Final Semester",
+    status: "Final Class",
     timeframe: "In Progress",
     location: "Salt Lake City, Utah, United States",
     proofImage: "/projects/remaining-classes.png",
@@ -59,7 +59,7 @@ export const education = [
   {
     institution: "Western Governors University",
     program: "Artificial Intelligence and Machine Learning,\nComputer Science - M.S.",
-    status: "First Semester Fall 2026",
+    status: "Spring 2027",
     timeframe: "",
     location: "Salt Lake City, Utah, United States",
     proofLabel: "View degree",
